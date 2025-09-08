@@ -151,6 +151,7 @@
   const fDate=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'long'}).format(d);
   const fDateShort=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'2-digit'}).format(d);
   const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
+  const relDays=(a,b)=>Math.round((+b - +a)/(1000*60*60*24));
 
   // ======= DEMO ANDMED =======
   const d=(y,m,day)=>new Date(y,m,day);
@@ -166,20 +167,27 @@
 
   // ======= STATE =======
   let range=30, clientsState=[];
-  let importedRows=null; // kui impordid, hoian toorandmed siin
+  let importedRows=null; // imporditud read
+  let clientMeta=new Map(); // kliendipõhised metaandmed
+  let hasData=false;
 
-  // seeriad demo jaoks
+  // demo seeriad
   const seriesFor=(r,s,o)=>({30:preset30,60:preset60,90:preset90}[r]).map(p=>({date:new Date(p.date),balance:Math.round(p.balance*s+o)}));
   function rebuild(){ // demo rebuild
     clientsState=clients.map(c=>{
       const base=seriesFor(range,c.scale,c.offset);
-      return {name:c.name,baseData:base,data:base.map(x=>({...x}))}
+      return {name:c.name,baseData:base.map(x=>({...x})),data:base.map(x=>({...x}))}
     });
+    // demo meta
+    clientMeta = new Map([
+      ["Klient A",{due_days:14, usual_payment_days:16, past_issues:0}],
+      ["Klient B",{due_days:30, usual_payment_days:37, past_issues:2}],
+      ["Klient C",{due_days:21, usual_payment_days:28, past_issues:1}],
+    ]);
   }
 
-  // seeriad imporditud andmetest
+  // imporditud seeriad
   function rebuildFromImported(rows){
-    // rows: [{date: "YYYY-MM-DD", client: "...", forecast: num, actual?: num}]
     const byClient = new Map();
     rows.forEach(r=>{
       const dt = new Date(r.date);
@@ -188,9 +196,21 @@
       if(!byClient.has(r.client)) byClient.set(r.client,{name:r.client, baseData:[], data:[]});
       byClient.get(r.client).baseData.push(base);
       byClient.get(r.client).data.push(rec);
+
+      // kui lamedas reas on meta-väljad, koosta meta
+      const due_days = num(r.due_days);
+      const upd = num(r.usual_payment_days);
+      const past = (r.past_issues===true || r.past_issues===false) ? (r.past_issues?1:0) : num(r.past_issues);
+      if(isFinite(due_days)||isFinite(upd)||isFinite(past)){
+        const prev = clientMeta.get(r.client) || {};
+        clientMeta.set(r.client,{
+          due_days: isFinite(due_days)?due_days:(prev.due_days ?? null),
+          usual_payment_days: isFinite(upd)?upd:(prev.usual_payment_days ?? null),
+          past_issues: isFinite(past)?past:(prev.past_issues ?? 0)
+        });
+      }
     });
     clientsState = [...byClient.values()].map(c=>{
-      // sort by date
       c.baseData.sort((a,b)=>+a.date-+b.date);
       c.data.sort((a,b)=>+a.date-+b.date);
       return c;
@@ -201,13 +221,12 @@
   function aggregate(kind){
     const map=new Map();
     clientsState.forEach(c=>(kind==='base'?c.baseData:c.data).forEach(p=>{
-      const k=+p.date;
-      map.set(k,(map.get(k)||0)+ (Number(p.balance)||0));
+      const k=+p.date; map.set(k,(map.get(k)||0)+ (Number(p.balance)||0));
     }));
     return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([k,sum])=>({date:new Date(+k),balance:sum}))
   }
 
-  // ======= TUME/HELE REŽIIM =======
+  // ======= TUME/HELE =======
   function setTheme(mode){
     document.body.setAttribute('data-theme',mode);
     localStorage.setItem('finsight_theme',mode);
@@ -220,42 +239,38 @@
     $("#darkBtn").onclick=()=>setTheme(document.body.getAttribute('data-theme')==='dark'?'light':'dark');
   })();
 
-  // ======= HOIATUSED (demo visuaal) =======
-  (function(){
-    const data=[{type:"critical",title:"Likviidsusauk 5 päeva pärast",detail:"Jääk ei kata tarnija Z makset (2 500 €)."},
-                {type:"info",title:"Paku ettemakse soodustust",detail:"Klient Y võib maksta varem 2% soodustusega."},
-                {type:"warn",title:"Lükka tarnija X arve edasi",detail:"Lükka 1 200 € 7 päeva, et jääk püsiks positiivne."}];
-    const el=$("#alerts");
-    data.forEach(a=>{
-      const tone=a.type==="critical"?"#fecaca":(a.type==="warn"?"#fde68a":"#bbf7d0");
-      const card=document.createElement('div');
-      card.style.cssText=`border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px;background:${tone}20`;
-      card.innerHTML=`<div style="font-weight:600">${a.title}</div><div class="muted" style="font-size:13px">${a.detail}</div>`;
-      el.appendChild(card);
-    });
-  })();
-
   // ======= WHAT-IF =======
   const delay=$("#delay"),discount=$("#discount"),delayVal=$("#delay-val"),discountVal=$("#discount-val");
   delay.oninput=()=>delayVal.textContent=delay.value;
   discount.oninput=()=>discountVal.textContent=discount.value;
   $("#rerun").addEventListener('click',simulate);
+
+  // UUS: skaleeri kõik tuleviku punktid
   function simulate(){
+    if(!hasData){ toast("Andmeid pole – loo prognoos või impordi fail"); return; }
     const dly=+delay.value||0, disc=+discount.value||0;
-    const factor=1+Math.min(.5,dly*.05)-Math.min(.3,disc*.03);
-    const pivot=+new Date(2025,8,2);
-    clientsState=clientsState.map(c=>({
+    const factor=1 + Math.min(.5, dly*.05) - Math.min(.3, disc*.03);
+
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    clientsState = clientsState.map(c => ({
       ...c,
-      data:c.data.map(pt=>(+pt.date===pivot)?{...pt,balance:Math.round((Number(pt.balance)||0)*factor)}:{...pt})
+      data: c.data.map(pt => {
+        const dt = new Date(pt.date); dt.setHours(0,0,0,0);
+        const isFuture = (+dt) >= (+today0);
+        const val = Number(pt.balance) || 0;
+        return isFuture ? { ...pt, balance: Math.round(val * factor) } : { ...pt };
+      })
     }));
-    refresh(); toast("Stsenaarium uuendatud");
+
+    refresh();
+    toast("Stsenaarium uuendatud");
   }
 
   // ======= FORECAST (30/60/90) =======
   function initRange(r){
     range=r;
     if(importedRows){ rebuildFromImported(importedRows); } else { rebuild(); }
-    // What-if jääb aktiivseks ka imporditud andmetel (mõjutab vaid pivot kuupäeva, kui on)
+    hasData = clientsState.some(c=> (c.data?.length||0) > 0);
     refresh();
   }
   document.getElementById('createBtn').onclick=()=>{
@@ -269,35 +284,83 @@
     const file=e.target.files?.[0]; if(!file){return;}
     try{
       const text = await file.text();
+      let parsed; try { parsed = JSON.parse(text); } catch {}
       let rows;
-      if(file.name.toLowerCase().endsWith('.json')){
-        rows = JSON.parse(text);
+
+      // Vorm 1: { rows:[], clientMeta:{} }
+      if(parsed && !Array.isArray(parsed) && parsed.rows){
+        rows = parsed.rows;
+        importedRows = rows;
+        clientMeta = new Map();
+        if(parsed.clientMeta && typeof parsed.clientMeta === 'object'){
+          Object.entries(parsed.clientMeta).forEach(([k,v])=>{
+            clientMeta.set(k, {
+              due_days: num(v.due_days),
+              usual_payment_days: num(v.usual_payment_days),
+              past_issues: num(v.past_issues) || 0
+            });
+          });
+        }
       }else{
-        rows = parseCSV(text);
+        // Vorm 2: lamedad read või CSV
+        if(Array.isArray(parsed)){ rows = parsed; }
+        if(!rows){
+          rows = parseCSV(text);
+        }
+        importedRows = rows;
       }
-      // normaliseeri väljad
+
       rows = rows.map(r=>({
         date: (r.date||r.kuupäev||r.Kuupäev||"").trim(),
         client: (r.client||r.klient||r["Kliendi nimi"]||"").trim(),
         forecast: num(r.forecast ?? r.prognoos ?? r["Prognoositud jääk (€)"]),
-        actual: num(r.actual ?? r.tegelik ?? r["Tegelik jääk (€)"])
+        actual: num(r.actual ?? r.tegelik ?? r["Tegelik jääk (€)"]),
+        due_days: num(r.due_days ?? r["Maksetähtaeg (p)"]),
+        usual_payment_days: num(r.usual_payment_days ?? r["Tüüpiline laekumine (p)"]),
+        past_issues: (r.past_issues===true||r.past_issues===false)?(r.past_issues?1:0):num(r.past_issues ?? r["Varasemad probleemid (kordade arv)"])
       })).filter(r=>r.date && r.client && isFinite(r.forecast));
 
       if(!rows.length){ toast("Failist ei leitud sobivaid ridu"); return; }
 
-      importedRows = rows;
+      if(!clientMeta || !(clientMeta instanceof Map) || clientMeta.size===0){
+        clientMeta = new Map();
+      }
+      rows.forEach(r=>{
+        const prev = clientMeta.get(r.client) || {};
+        clientMeta.set(r.client,{
+          due_days: isFinite(r.due_days)?r.due_days:(prev.due_days ?? null),
+          usual_payment_days: isFinite(r.usual_payment_days)?r.usual_payment_days:(prev.usual_payment_days ?? null),
+          past_issues: isFinite(r.past_issues)?r.past_issues:(prev.past_issues ?? 0)
+        });
+      });
+
       rebuildFromImported(rows);
+      hasData = true;
       refresh();
       toast(`Imporditud ${rows.length} rida`);
     }catch(err){
-      console.error(err); toast("Impordi viga");
+      try{
+        const rows = parseCSV(text).map(r=>({
+          date: (r.date||r.kuupäev||r.Kuupäev||"").trim(),
+          client: (r.client||r.klient||r["Kliendi nimi"]||"").trim(),
+          forecast: num(r.forecast ?? r.prognoos ?? r["Prognoositud jääk (€)"]),
+          actual: num(r.actual ?? r.tegelik ?? r["Tegelik jääk (€)"])
+        })).filter(r=>r.date && r.client && isFinite(r.forecast));
+        if(!rows.length){ throw new Error("No CSV rows"); }
+        importedRows = rows;
+        rebuildFromImported(rows);
+        hasData = true;
+        refresh();
+        toast(`Imporditud ${rows.length} rida (CSV)`);
+      }catch(e2){
+        console.error(err); console.error(e2); toast("Impordi viga");
+      }
     }finally{
       e.target.value = "";
     }
   });
 
   function parseCSV(text){
-    // toeta ; või , eraldajat
     const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim().length>0);
     if(!lines.length) return [];
     const sniffSemicolon = lines[0].includes(';');
@@ -312,11 +375,11 @@
   }
   const num=v=>v==null||v===''?null:Number(String(v).replace(/\s/g,'').replace(',', '.'));
 
-  // ======= CSV EKSPORT (agregaat) =======
+  // ======= CSV EKSPORT =======
   document.getElementById('exportBtn').onclick=()=>{
+    if(!hasData){ toast("Andmeid pole eksportida"); return; }
     const today=new Date(); today.setHours(0,0,0,0);
     const rows=[["Kuupäev","Kliendi nimi","Tegelik jääk (€)","Prognoositud jääk (€)","Märkus"]];
-    // Kui on imporditud read, ekspordime need, vastasel juhul ekspordime demo agregaat+klient
     if(importedRows){
       importedRows.forEach(r=>{
         const dt=new Date(r.date);
@@ -327,7 +390,8 @@
       clientsState.forEach(c=>{
         (c.data||[]).forEach(pt=>{
           const past=(+pt.date)<(+today);
-          rows.push([fDate(pt.date), c.name, past?fmt((c.baseData.find(x=>+x.date==+pt.date)||{}).balance):"", (pt.balance!=null?String(pt.balance):""), past?"Tegelik":"Prognoos"]);
+          const base = (c.baseData.find(x=>+x.date==+pt.date)||{}).balance;
+          rows.push([fDate(pt.date), c.name, past?fmt(base):"", (pt.balance!=null?String(pt.balance):""), past?"Tegelik":"Prognoos"]);
         });
       });
     }
@@ -341,19 +405,20 @@
 
   // ======= KPI arvutused =======
   function computeKPIs(){
+    if(!hasData) return {low:null,risk:null,dso:null,savings:null};
+
     const s = aggregate('forecast');
     const low = s.length ? s.reduce((m,p)=>Math.min(m, Number(p.balance)||0), Infinity) : null;
 
-    // Riskantsed arved (tulevikus prognoos < 0) – kliendiread
+    // Riskantsed punktid (tulevikus negatiivsed)
     let risk = null;
     const today = new Date(); today.setHours(0,0,0,0);
     if(importedRows){
-      risk = importedRows.filter(r=> {
+      risk = importedRows.filter(r=>{
         const dt=new Date(r.date); dt.setHours(0,0,0,0);
         return (+dt)>=(+today) && (Number(r.forecast)||0) < 0;
       }).length;
     }else{
-      // demol arvestame klientide seeriatest
       let cnt=0;
       clientsState.forEach(c=>{
         c.data.forEach(pt=>{
@@ -364,9 +429,14 @@
       risk = cnt;
     }
 
-    // DSO (keskmine laekumisaeg päevades): kui imporditud, proovi leida iga kliendi esimese mineviku prognoosi ja esimese actual'i vahe
+    // DSO: proovi esmalt meta keskmist; muidu varuvariant delta'dest
     let dso = null;
-    if(importedRows){
+    const metas = clientsState
+      .map(c => (clientMeta.get(c.name)||{}).usual_payment_days)
+      .filter(v => Number.isFinite(v));
+    if (metas.length){
+      dso = Math.round(metas.reduce((a,b)=>a+b,0)/metas.length);
+    } else if (importedRows) {
       const byClient = new Map();
       importedRows.forEach(r=>{
         const dt = new Date(r.date);
@@ -378,17 +448,18 @@
       byClient.forEach(list=>{
         list.sort((a,b)=>+a.date-+b.date);
         const today0 = new Date(); today0.setHours(0,0,0,0);
-        const firstPastForecast = list.find(x=>(+x.date)<(+today0) && isFinite(x.forecast));
-        const firstActual = list.find(x=>isFinite(x.actual));
-        if(firstPastForecast && firstActual && (+firstActual.date)>=(+firstPastForecast.date)){
-          const diffDays = Math.round((+firstActual.date - +firstPastForecast.date)/(1000*60*60*24));
+        const past = list.filter(x => (+x.date) < (+today0));
+        const firstForecast = past.find(x => isFinite(x.forecast));
+        const firstActual = past.find(x => isFinite(x.actual) && (!firstForecast || +x.date >= +firstForecast.date));
+        if(firstForecast && firstActual){
+          const diffDays = Math.round((+firstActual.date - +firstForecast.date)/(1000*60*60*24));
           if(diffDays>=0 && isFinite(diffDays)) deltas.push(diffDays);
         }
       });
-      if(deltas.length){ dso = Math.round(deltas.reduce((a,b)=>a+b,0)/deltas.length); }
+      if(deltas.length) dso = Math.round(deltas.reduce((a,b)=>a+b,0)/deltas.length);
     }
 
-    // Säästupotentsiaal: 2% kõigi tulevikus negatiivsete forecast summa absoluutväärtuselt
+    // Säästupotentsiaal (2% tuleviku negatiivsete punktide summast)
     let savings = null;
     if(importedRows){
       const today0 = new Date(); today0.setHours(0,0,0,0);
@@ -414,11 +485,94 @@
     return {low, risk, dso, savings};
   }
 
+  // ======= HOIATUSTE TUVASTUS (kliendipõhine) =======
+  function detectAlerts(){
+    if(!hasData) return [];
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    const alertsByClient = [];
+
+    clientsState.forEach(c=>{
+      const meta = clientMeta.get(c.name) || {};
+      const due = meta.due_days ?? null;
+      const usual = meta.usual_payment_days ?? null;
+      const issues = meta.past_issues ?? 0;
+
+      const futureNeg = (c.data||[]).filter(p=>{
+        const dt=new Date(p.date); dt.setHours(0,0,0,0);
+        return (+dt) >= (+today) && (Number(p.balance)||0) < 0;
+      });
+
+      if(!futureNeg.length) return;
+
+      const firstNeg = futureNeg.reduce((m,p)=> (p.date < m.date ? p : m), futureNeg[0]);
+      const days = Math.max(0, relDays(today, firstNeg.date));
+      const type = days<=3 ? "critical" : (days<=10 ? "warn" : "info");
+
+      const metaBits = [];
+      if(isFinite(due)) metaBits.push(`maksetähtaeg ~${due} p`);
+      if(isFinite(usual)) metaBits.push(`tüüpiline laekumine ~${usual} p`);
+      if(isFinite(issues) && issues>0) metaBits.push(`varasemaid probleeme: ${issues}×`);
+
+      alertsByClient.push({
+        client: c.name,
+        type,
+        title: `Negatiivne jääk ${days ? (days + " päeva pärast") : "täna"}`,
+        detail: `Esimene negatiivne punkt ${fDate(firstNeg.date)} (${fmt(firstNeg.balance)} €).${metaBits.length? " ("+metaBits.join(", ")+")":""}`
+      });
+    });
+
+    const s = aggregate('forecast');
+    const futureNegAgg = s.filter(p=>{
+      const dt=new Date(p.date); dt.setHours(0,0,0,0);
+      return (+dt) >= (+today) && (Number(p.balance)||0) < 0;
+    });
+    if(futureNegAgg.length){
+      const minPt = futureNegAgg.reduce((m,p)=> (p.balance < m.balance ? p : m), futureNegAgg[0]);
+      const daysAgg = Math.max(0, relDays(today, minPt.date));
+      alertsByClient.unshift({
+        client: null,
+        type: daysAgg<=3 ? "critical" : "warn",
+        title:`Likviidsusauk portfellis ${daysAgg ? (daysAgg+" päeva pärast") : "täna"}`,
+        detail:`Minimaalseks prognoositakse ${fmt(minPt.balance)} € (${fDate(minPt.date)}).`
+      });
+    }
+
+    return alertsByClient;
+  }
+
+  // ======= RENDERDUS =======
+  function renderAlerts(items){
+    const el=$("#alerts");
+    el.innerHTML="";
+    if(!items || !items.length) return;
+
+    const general = items.filter(a=>!a.client);
+    const byClient = items.filter(a=>a.client);
+
+    const paintCard = (a)=>{
+      const tone = a.type==="critical" ? "var(--red)" : (a.type==="warn" ? "var(--yellow)" : "var(--green)");
+      const card=document.createElement('div');
+      card.style.cssText=`border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px;background:color-mix(in srgb, ${tone} 14%, var(--card));`;
+      const head = a.client ? `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">${a.client}</div>` : "";
+      card.innerHTML = `${head}<div style="font-weight:600">${a.title}</div><div class="muted" style="font-size:13px">${a.detail}</div>`;
+      return card;
+    };
+
+    general.forEach(a=>el.appendChild(paintCard(a)));
+    byClient.forEach(a=>el.appendChild(paintCard(a)));
+  }
+
   // ======= GRAAFIK & KPI =======
   function drawChart(){
-    const s = aggregate('forecast');
     const el = document.getElementById("chart");
     el.innerHTML = "";
+    if(!hasData){
+      document.getElementById('chart-note').textContent = "";
+      return;
+    }
+
+    const s = aggregate('forecast');
     const w = el.clientWidth || 600, h = el.clientHeight || 240, p = {l:46,r:10,t:10,b:28};
     const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.setAttribute("viewBox",`0 0 ${w} ${h}`); el.appendChild(svg);
@@ -430,8 +584,9 @@
     const g2=document.createElementNS(svg.namespaceURI,"stop"); g2.setAttribute("offset","100%"); g2.setAttribute("stop-color","#2563eb"); g2.setAttribute("stop-opacity","0.02");
     grad.appendChild(g1); grad.appendChild(g2); defs.appendChild(grad); svg.appendChild(defs);
 
-    const xs = s.map(d => fDateShort(d.date));
-    const ys = s.map(d => Number(d.balance)||0);
+    const sAgg = s;
+    const xs = sAgg.map(d => fDateShort(d.date));
+    const ys = sAgg.map(d => Number(d.balance)||0);
     const xspan = Math.max(1, (xs.length - 1));
     const xstep = (w - p.l - p.r) / xspan;
     const ymin = Math.min(0, ...ys), ymax = Math.max(...ys), yspan = Math.max(1, ymax - ymin);
@@ -479,7 +634,7 @@
     svg.appendChild(axis);
 
     let dpath = "";
-    s.forEach((pt, i) => { const px = X(i), py = Y(Number(pt.balance)||0); dpath += (i===0 ? `M ${px} ${py}` : ` L ${px} ${py}`); });
+    sAgg.forEach((pt, i) => { const px = X(i), py = Y(Number(pt.balance)||0); dpath += (i===0 ? `M ${px} ${py}` : ` L ${px} ${py}`); });
     const y0 = Y(0);
     if (xs.length > 0) dpath += ` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;
     const area = document.createElementNS(svg.namespaceURI,"path");
@@ -495,28 +650,48 @@
 
   function refresh(){
     const {low, risk, dso, savings} = computeKPIs();
-    $("#kpi-low").textContent = low==null? "–" : `${fmt(low)} €`;
-    $("#kpi-risk").textContent = risk==null? "–" : String(risk);
-    $("#kpi-dso").textContent = dso==null? "–" : `${dso} p`;
-    $("#kpi-savings").textContent = savings==null? "–" : `${fmt(Math.round(savings))} €`;
 
-    $("#chart-note").innerHTML=(low!=null && low<0)
+    // UUS: uuenda What-IF väljundit
+    const res = document.getElementById('result-low');
+    if (res) res.textContent = (low==null ? "–" : `${fmt(low)} €`);
+
+    document.getElementById('kpi-low').textContent = low==null? "–" : `${fmt(low)} €`;
+    document.getElementById('kpi-risk').textContent = risk==null? "–" : String(risk);
+    document.getElementById('kpi-dso').textContent = dso==null? "–" : `${dso} p`;
+    document.getElementById('kpi-savings').textContent = savings==null? "–" : `${fmt(Math.round(savings))} €`;
+
+    if(!hasData){
+      document.getElementById('chart').innerHTML = "";
+      document.getElementById('chart-note').textContent = "";
+      renderAlerts([]);
+      return;
+    }
+
+    document.getElementById('chart-note').innerHTML=(low!=null && low<0)
       ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
       : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
 
     drawChart();
+
+    const alerts = detectAlerts();
+    renderAlerts(alerts);
   }
 
-  // INIT
+  // ======= INIT (tühi algseis) =======
   (function init(){
-    const initial = parseInt(document.getElementById('horizon').value,10) || 30;
-    initRange(initial);
-    // What-if liugurite tekstid
-    document.getElementById('delay-val').textContent = '0';
-    document.getElementById('discount-val').textContent = '0';
+    hasData = false;
+    clientsState = [];
+    importedRows = null;
+    clientMeta = new Map();
+    refresh();
+
+    document.getElementById('createBtn').onclick=()=>{
+      const r=parseInt(document.getElementById('horizon').value,10)||30;
+      initRange(r); toast(`Prognoos loodud ${r} päevaks`);
+    };
   })();
 
-  window.addEventListener('resize',drawChart);
+  window.addEventListener('resize',()=>{ if(hasData) drawChart(); });
 </script>
 </body>
 </html>
