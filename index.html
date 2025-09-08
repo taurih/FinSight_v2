@@ -20,7 +20,17 @@
   .row{display:flex;gap:10px;align-items:center}
   .between{justify-content:space-between}.grow{flex:1}
   .brand{display:flex;gap:8px;align-items:center;font-weight:600}
-  .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#2563eb,var(--accent));color:#fff;display:grid;place-items:center}
+
+  /* Logo pildiga */
+  .logo{
+    width:32px;height:32px;border-radius:10px;display:grid;place-items:center;
+    background:transparent;padding:0;
+  }
+  .logo-img{
+    width:100%;height:100%;object-fit:contain;border-radius:10px;display:block;
+  }
+  [data-theme="dark"] .logo{ background:transparent; }
+
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
 
   .btn{
@@ -71,7 +81,12 @@
 <body>
   <header class="top">
     <div class="container row">
-      <div class="brand"><div class="logo">F</div> FinSight</div>
+      <div class="brand">
+        <div class="logo">
+          <img src="FinSightlogo.png" alt="FinSight logo" class="logo-img" width="32" height="32" decoding="async"/>
+        </div>
+        FinSight
+      </div>
       <div class="search-wrap grow"><input class="input" placeholder="Otsi arveid, kliente…"></div>
       <select id="horizon" class="select" style="max-width:140px">
         <option value="30" selected>30 päeva</option><option value="60">60 päeva</option><option value="90">90 päeva</option>
@@ -151,7 +166,6 @@
   const fDate=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'long'}).format(d);
   const fDateShort=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'2-digit'}).format(d);
   const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
-  const relDays=(a,b)=>Math.round((+b - +a)/(1000*60*60*24));
 
   // --- AJAVAHEMIK (täna ... täna + range päeva)
   function windowBounds(){
@@ -208,7 +222,6 @@
       byClient.get(r.client).baseData.push(base);
       byClient.get(r.client).data.push(rec);
 
-      // kui lamedas reas on meta-väljad, koosta meta; NB! kasuta Number.isFinite
       const due_days = num(r.due_days);
       const upd = num(r.usual_payment_days);
       const past = (r.past_issues===true || r.past_issues===false) ? (r.past_issues?1:0) : num(r.past_issues);
@@ -261,7 +274,6 @@
   discount.oninput=()=>discountVal.textContent=discount.value;
   $("#rerun").addEventListener('click',simulate);
 
-  // skaleeri kõik punktid valitud aknas
   function simulate(){
     if(!hasData){ toast("Andmeid pole – loo prognoos või impordi fail"); return; }
     const dly=+delay.value||0, disc=+discount.value||0;
@@ -399,7 +411,7 @@
       importedRows.forEach(r=>{
         const dt=new Date(r.date);
         const past = (+dt) < (+start);
-        if(!inWindow(dt, start, end) && !past) return; // ekspordi ainult akna sees + minevik akna algusest tagasi
+        if(!inWindow(dt, start, end) && !past) return;
         rows.push([fDate(dt), r.client || "", r.actual ?? "", r.forecast ?? "", past?"Tegelik":"Prognoos"]);
       });
     }else{
@@ -428,7 +440,7 @@
     const s = aggregate('forecast', { windowed:true });
     const low = s.length ? s.reduce((m,p)=>Math.min(m, Number(p.balance)||0), Infinity) : null;
 
-    // Riskantsed punktid horisondis (negatiivsed)
+    // Risk (negatiivsed horisondis)
     let risk = null;
     const { start, end } = windowBounds();
     if(importedRows){
@@ -447,7 +459,7 @@
       risk = cnt;
     }
 
-    // DSO: meta keskmine; varuvariant delta'dest (mitte horisondiga seotud)
+    // DSO: meta keskmine; varuvariant mineviku delta'dest
     let dso = null;
     const metas = clientsState
       .map(c => (clientMeta.get(c.name)||{}).usual_payment_days)
@@ -477,7 +489,7 @@
       if(deltas.length) dso = Math.round(deltas.reduce((a,b)=>a+b,0)/deltas.length);
     }
 
-    // Säästupotentsiaal (2%) horisondis olevate negatiivsete summast
+    // Sääst (2% negatiivsete summast horisondis)
     let savings = null;
     if(importedRows){
       const sumNeg = importedRows.reduce((acc,r)=>{
@@ -600,7 +612,7 @@
 
     const { start, end } = windowBounds();
     let s = aggregate('forecast', { windowed:true });
-    s = padSeries(s, start, end); // <-- lisa sentinaalid, et joon ulatuks akna lõpuni
+    s = padSeries(s, start, end); // lisa sentinaalid
 
     const w = el.clientWidth || 600, h = el.clientHeight || 240, p = {l:46,r:10,t:10,b:28};
     const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -673,8 +685,7 @@
 
     const zero = document.createElementNS(svg.namespaceURI,"line");
     zero.setAttribute("x1", p.l); zero.setAttribute("x2", w - p.r);
-    zero.setAttribute("y1", y0);  y0;
-    zero.setAttribute("y2", y0);
+    zero.setAttribute("y1", y0);  zero.setAttribute("y2", y0);
     zero.setAttribute("class", "zero");
     svg.appendChild(zero);
   }
@@ -682,23 +693,23 @@
   function refresh(){
     const {low, risk, dso, savings} = computeKPIs();
 
-    // Uuenda What-IF väljundit
+    // What-IF väljund
     const res = document.getElementById('result-low');
     if (res) res.textContent = (low==null ? "–" : `${fmt(low)} €`);
 
-    document.getElementById('kpi-low').textContent = low==null? "–" : `${fmt(low)} €`;
-    document.getElementById('kpi-risk').textContent = risk==null? "–" : String(risk);
-    document.getElementById('kpi-dso').textContent = dso==null? "–" : `${dso} p`;
-    document.getElementById('kpi-savings').textContent = savings==null? "–" : `${fmt(Math.round(savings))} €`;
+    $("#kpi-low").textContent = low==null? "–" : `${fmt(low)} €`;
+    $("#kpi-risk").textContent = risk==null? "–" : String(risk);
+    $("#kpi-dso").textContent = dso==null? "–" : `${dso} p`;
+    $("#kpi-savings").textContent = savings==null? "–" : `${fmt(Math.round(savings))} €`;
 
     if(!hasData){
-      document.getElementById('chart').innerHTML = "";
-      document.getElementById('chart-note').textContent = "";
+      $("#chart").innerHTML = "";
+      $("#chart-note").textContent = "";
       renderAlerts([]);
       return;
     }
 
-    document.getElementById('chart-note').innerHTML=(low!=null && low<0)
+    $("#chart-note").innerHTML=(low!=null && low<0)
       ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
       : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
 
@@ -720,6 +731,11 @@
       const r=parseInt(document.getElementById('horizon').value,10)||30;
       initRange(r); toast(`Prognoos loodud ${r} päevaks`);
     };
+
+    // What-If UI live väärtused
+    const delay=$("#delay"),discount=$("#discount"),delayVal=$("#delay-val"),discountVal=$("#discount-val");
+    if(delay && delayVal) delay.oninput=()=>delayVal.textContent=delay.value;
+    if(discount && discountVal) discount.oninput=()=>discountVal.textContent=discount.value;
   })();
 
   window.addEventListener('resize',()=>{ if(hasData) drawChart(); });
