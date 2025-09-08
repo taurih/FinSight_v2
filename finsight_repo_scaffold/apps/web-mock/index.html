@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>FinSight – Demo (päris andmete tugi)</title>
+<title>FinSight – CSV/JSON import + demo</title>
 
-<!-- 1) Varajane teema seadmine enne CSS-i, et vältida "nupp kaob" efekti -->
+<!-- Varajane teema seadmine -->
 <script>
   (function () {
     try {
       var saved = localStorage.getItem('finsight_theme');
       var mode = saved === 'dark' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', mode);
-    } catch(e) { /* ignore */ }
+    } catch(e) {}
   })();
 </script>
 
@@ -39,7 +39,7 @@
     padding:8px 12px;border:1px solid var(--btn-border);border-radius:12px;
     background:var(--btn-bg);color:var(--btn-text);cursor:pointer;
     transition:transform .04s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
-    box-shadow:0 1px 1px rgba(0,0,0,.04);
+    box-shadow:0 1px 1px rgba(0,0,0,.04)
   }
   .btn:hover{box-shadow:0 3px 10px rgba(2,132,199,.08)}
   .btn:active{transform:translateY(1px)}
@@ -71,6 +71,11 @@
     <div class="container row">
       <div class="brand"><div class="logo">F</div> FinSight</div>
       <div class="search-wrap grow"><input class="input" placeholder="Otsi arveid, kliente…"></div>
+
+      <button id="loadSampleBtn" class="btn ghost" title="Laadi näidisandmed">Laadi näidisandmed</button>
+      <button id="importBtn" class="btn ghost" title="Impordi CSV/JSON">Impordi CSV/JSON</button>
+      <input id="fileInput" type="file" accept=".json,.csv,text/csv,application/json" style="display:none"/>
+
       <select id="horizon" class="select" style="max-width:140px">
         <option value="30">30 päeva</option><option value="60">60 päeva</option><option value="90">90 päeva</option>
       </select>
@@ -140,7 +145,6 @@
   const $=s=>document.querySelector(s);
   const fmt=n=>n.toLocaleString("et-EE",{maximumFractionDigits:0});
   const fDDMM=d=>{const dd=String(d.getDate()).padStart(2,'0');const mm=String(d.getMonth()+1).padStart(2,'0');return `${dd}.${mm}`};
-  const daysBetween=(a,b)=>Math.round((b-a)/(1000*60*60*24));
   const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
 
   // ==== teema ====
@@ -149,10 +153,9 @@
     try { localStorage.setItem('finsight_theme',m); } catch(e){}
     const btn = $("#darkBtn");
     if(btn) btn.textContent = `Tume: ${m==='dark'?'Sees':'Väljas'}`;
-    drawChart(); // värskenda värvid
+    drawChart();
   }
-  (function initThemeAfterPaint(){
-    // Sünkroniseeri nupu tekst varajase režiimiga
+  (function syncThemeOnStart(){
     const current = document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light';
     setTheme(current);
   })();
@@ -160,44 +163,84 @@
 
   // ==== seisund ====
   let range=30;
-  let raw={};           // demo.json sisu
-  let events=[];        // {date: Date, amount: number, client?: string, note?: string, actual?:boolean}
+  let raw={};           // laetud JSON/CSV tõlgendus
+  let events=[];        // {date: Date, amount: number, client?: string, actual?:boolean}
   let invoices=[];      // {issueDate,dueDate,paidDate?,amount,client}
-  let series=[];        // agregeeritud kumulatiivne seeria
-  let visible=[];       // seeria lõigatud vastavalt range'ile
+  let series=[];        // kumulatiivne seeria (alates startingBalance)
+  let visible=[];       // valitud horisondi lõik
 
-  // ==== andmete laadimine ====
-  async function loadData(){
-    try{
-      const r = await fetch('demo.json',{cache:'no-store'});
-      if(!r.ok) throw new Error('demo.json puudub või ei loe');
-      raw = await r.json();
-    }catch(e){
-      // varuandmed, kui demo.json puudub
-      raw = {
-        startingBalance: 5000,
-        cashEvents: [
-          { date:"2025-08-21", amount: 3000, client:"Klient A", actual:true },
-          { date:"2025-08-25", amount:-4200, client:"Tarnija Z", actual:true },
-          { date:"2025-08-29", amount: 1300, client:"Klient B", actual:true },
-          { date:"2025-09-02", amount:-5000, client:"Tarnija Z", actual:false },
-          { date:"2025-09-06", amount: 5600, client:"Klient C", actual:false },
-          { date:"2025-09-10", amount: 2400, client:"Klient A", actual:false }
-        ],
-        invoices: [
-          { issueDate:"2025-08-01", dueDate:"2025-08-14", paidDate:"2025-08-12", amount:1800, client:"Klient A" },
-          { issueDate:"2025-08-10", dueDate:"2025-08-24", paidDate:"2025-09-01", amount:2400, client:"Klient B" },
-          { issueDate:"2025-08-22", dueDate:"2025-09-05",                 amount:2600, client:"Klient C" }
-        ]
-      };
+  // ==== CSV parser (lihtne) ====
+  function parseCSV(text){
+    // toetab ; või , eraldajat, tsiteeringuid
+    const lines=text.replace(/\r/g,'').split('\n').filter(Boolean);
+    if(!lines.length) return [];
+    const sep = (lines[0].includes(';') && !lines[0].includes(',')) ? ';' : ',';
+    const header = lines[0].split(sep).map(h=>h.trim());
+    const rows = [];
+    for(let i=1;i<lines.length;i++){
+      const row = [];
+      let s=lines[i], cur='', inQ=false;
+      for(let j=0;j<s.length;j++){
+        const ch=s[j];
+        if(ch==='"' ){ if(inQ && s[j+1]==='"'){cur+='"'; j++;} else {inQ=!inQ;} }
+        else if(ch===sep && !inQ){ row.push(cur); cur=''; }
+        else { cur+=ch; }
+      }
+      row.push(cur);
+      const obj={};
+      header.forEach((h,ix)=>obj[h]= (row[ix]??'').trim());
+      rows.push(obj);
     }
+    return rows;
   }
 
-  function toDate(s){ const d = new Date(s); d.setHours(0,0,0,0); return d; }
+  // ==== andmete tõlgendamine ====
+  function toDate(s){ const d = new Date(s); if(isNaN(+d)) return null; d.setHours(0,0,0,0); return d; }
 
-  // Koosta sündmused
-  function buildEventsFromRaw(){
-    events = [];
+  function loadFromJSON(obj){
+    raw = obj || {};
+    buildFromRaw();
+  }
+
+  function loadFromCSVRows(rows){
+    // Autodetektsioon headerite järgi:
+    const cols = Object.keys(rows[0]||{});
+    const hasCash = ['date','amount'].every(k=>cols.includes(k));
+    const hasInv  = ['issueDate','dueDate','amount'].every(k=>cols.includes(k));
+
+    raw = { startingBalance: 0, cashEvents: [], invoices: [] };
+
+    if(hasCash){
+      rows.forEach(r=>{
+        raw.cashEvents.push({
+          date: r.date,
+          amount: Number(r.amount||0),
+          client: r.client||'—',
+          actual: String(r.actual||'').toLowerCase().startsWith('t') || r.actual==='1'
+        });
+      });
+    }
+    if(hasInv){
+      rows.forEach(r=>{
+        raw.invoices.push({
+          issueDate: r.issueDate,
+          dueDate: r.dueDate,
+          paidDate: r.paidDate || null,
+          amount: Number(r.amount||0),
+          client: r.client||'—'
+        });
+      });
+    }
+    // startingBalance püüa kätte võtta, kui on veerg 'startingBalance' esimesel real
+    if(cols.includes('startingBalance')){
+      const v = Number(rows[0].startingBalance);
+      if(!isNaN(v)) raw.startingBalance = v;
+    }
+    buildFromRaw();
+  }
+
+  function buildFromRaw(){
+    // invoices
     invoices = Array.isArray(raw.invoices)? raw.invoices.map(v=>({
       issueDate: v.issueDate?toDate(v.issueDate):null,
       dueDate:   v.dueDate?toDate(v.dueDate):null,
@@ -206,33 +249,36 @@
       client:    v.client||"—"
     })) : [];
 
+    // events
+    events = [];
     if(Array.isArray(raw.cashEvents) && raw.cashEvents.length){
       raw.cashEvents.forEach(ev=>{
-        if(!ev.date) return;
+        const dd = toDate(ev.date);
+        if(!dd) return;
         events.push({
-          date: toDate(ev.date),
+          date: dd,
           amount: Number(ev.amount||0),
           client: ev.client||"—",
-          note: ev.note||"",
           actual: !!ev.actual
         });
       });
     }else{
+      // Kui cashEvents puudub, tuleta invoices alusel (tasutud -> actual, ülejäänud due -> forecast)
       invoices.forEach(inv=>{
         if(inv.paidDate){
-          events.push({date:inv.paidDate, amount:inv.amount, client:inv.client, actual:true, note:"Tasumine"});
+          events.push({date:inv.paidDate, amount:inv.amount, client:inv.client, actual:true});
         }else if(inv.dueDate){
-          events.push({date:inv.dueDate, amount:inv.amount, client:inv.client, actual:false, note:"Prognoos"});
+          events.push({date:inv.dueDate, amount:inv.amount, client:inv.client, actual:false});
         }
       });
     }
 
+    // Agregeeri päevaks
     const byDay = new Map();
     events.forEach(ev=>{
       const k = +ev.date;
-      const cur = byDay.get(k) || {date:ev.date, amount:0, clients:new Set(), actual:true};
+      const cur = byDay.get(k) || {date:ev.date, amount:0, actual:true};
       cur.amount += ev.amount;
-      cur.clients.add(ev.client);
       cur.actual = cur.actual && ev.actual;
       byDay.set(k, cur);
     });
@@ -248,7 +294,7 @@
     }
   }
 
-  // Lõika nähtavaks 30/60/90 päeva
+  // Horisont
   function setRange(r){
     range = r;
     if(!series.length){ visible = []; return; }
@@ -257,7 +303,6 @@
     visible = series.filter(pt => pt.date >= start && pt.date <= end);
     refreshKPIs();
     drawChart();
-    toast(`Prognoos loodud ${r} päevaks`);
   }
 
   // KPI-d
@@ -297,12 +342,13 @@
     $("#delay-val").textContent = String(dly);
     $("#discount-val").textContent = String(disc);
 
-    const idx = series.reduce((best,i,ix,arr)=>{
-      if(arr[best]===undefined) return ix;
-      if(i.balance < arr[best].balance && !i.actual) return ix;
-      return best;
-    }, -1);
-
+    // Leia prognoosi madalaim punkt ja nihuta sellest edasi
+    let idx=-1, best=Infinity;
+    for(let i=0;i<series.length;i++){
+      if(!series[i].actual && series[i].balance<best){
+        best=series[i].balance; idx=i;
+      }
+    }
     if(idx>=0){
       const factor = 1 + Math.min(.5, dly*.05) - Math.min(.3, disc*.03);
       const delta  = Math.round(series[idx].balance * (factor-1));
@@ -314,7 +360,7 @@
     toast("Stsenaarium uuendatud");
   }
 
-  // Chart
+  // Graafik
   function drawChart(){
     const el=$("#chart"); el.innerHTML="";
     if(!visible.length){ return; }
@@ -364,7 +410,7 @@
     }
   }
 
-  // CSV
+  // CSV eksport (kogu seeria)
   $("#exportBtn").onclick=()=>{
     if(!series.length){ toast("Pole midagi eksportida"); return; }
     const rows=[["Kuupäev","Kumulatiivne jääk (€)","Märkus"]];
@@ -379,32 +425,64 @@
     toast("CSV eksporditud");
   };
 
-  // Nupud
-  $("#createBtn").onclick=()=>{ const r=parseInt($("#horizon").value,10); setRange(r); };
+  // Import nupud
+  $("#importBtn").onclick=()=> $("#fileInput").click();
+  $("#fileInput").addEventListener('change', async (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const txt = await f.text();
+    try{
+      if(f.name.toLowerCase().endsWith('.json') || txt.trim().startsWith('{')){
+        const obj = JSON.parse(txt);
+        loadFromJSON(obj);
+      }else{
+        const rows = parseCSV(txt);
+        if(!rows.length) throw new Error('CSV tühi');
+        loadFromCSVRows(rows);
+      }
+      setRange(parseInt($("#horizon").value,10) || 30);
+      toast("Andmed imporditud");
+    }catch(err){
+      console.error(err);
+      toast("Viga importimisel");
+    } finally {
+      e.target.value = "";
+    }
+  });
+
+  // Näidisandmed (üks klikk)
+  $("#loadSampleBtn").onclick=()=>{
+    const demo = {
+      startingBalance: 5000,
+      cashEvents: [
+        { date:"2025-08-21", amount: 3000, client:"Klient A", actual:true },
+        { date:"2025-08-25", amount:-4200, client:"Tarnija Z", actual:true },
+        { date:"2025-08-29", amount: 1300, client:"Klient B", actual:true },
+        { date:"2025-09-02", amount:-5000, client:"Tarnija Z", actual:false },
+        { date:"2025-09-06", amount: 5600, client:"Klient C", actual:false },
+        { date:"2025-09-10", amount: 2400, client:"Klient A", actual:false }
+      ],
+      invoices: [
+        { issueDate:"2025-08-01", dueDate:"2025-08-14", paidDate:"2025-08-12", amount:1800, client:"Klient A" },
+        { issueDate:"2025-08-10", dueDate:"2025-08-24", paidDate:"2025-09-01", amount:2400, client:"Klient B" },
+        { issueDate:"2025-08-22", dueDate:"2025-09-05",                 amount:2600, client:"Klient C" }
+      ]
+    };
+    loadFromJSON(demo);
+    setRange(parseInt($("#horizon").value,10) || 30);
+    toast("Näidisandmed laetud");
+  };
+
+  // Loo prognoos
+  $("#createBtn").onclick=()=>{ const r=parseInt($("#horizon").value,10)||30; setRange(r); };
   $("#rerun")?.addEventListener('click',()=>{ applyWhatIf(); });
   $("#delay")?.addEventListener('input',e=>$("#delay-val").textContent=e.target.value);
   $("#discount")?.addEventListener('input',e=>$("#discount-val").textContent=e.target.value);
   window.addEventListener('resize',drawChart);
 
-  // INIT
-  (async function init(){
-    await loadData();
-    buildEventsFromRaw();
-    setRange(30);
-    const alerts=[
-      {type:"critical",title:"Likviidsusauk prognoosis",detail:"Jääk langeb alla 0 valitud horisondis."},
-      {type:"info",title:"Paku ettemakse soodustust",detail:"Hilinenud klientidele 2% soodustus võib kiirendada."},
-      {type:"warn",title:"Ajasta väljaminek hilisemaks",detail:"Lükka tarnija makse 7p, et vältida miinust."}
-    ];
-    const el=$("#alerts");
-    el.innerHTML="";
-    alerts.forEach(a=>{
-      const tone=a.type==="critical"?"#fecaca":(a.type==="warn"?"#fde68a":"#bbf7d0");
-      const card=document.createElement('div');
-      card.style.cssText=`border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px;background:${tone}20`;
-      card.innerHTML=`<div style="font-weight:600">${a.title}</div><div class="muted" style="font-size:13px">${a.detail}</div>`;
-      el.appendChild(card);
-    });
+  // INIT: lae kohe näidisandmed, et demo töötaks
+  (function init(){
+    $("#loadSampleBtn").click();
   })();
 </script>
 </body>
