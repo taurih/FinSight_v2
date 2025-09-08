@@ -1,1 +1,142 @@
-<!doctype html><html><head><meta charset='utf-8'><title>FinSight</title></head><body><h1>FinSight demo</h1></body></html>
+<!doctype html>
+<html lang="et">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FinSight – Demo eelvaade</title>
+<style>
+  :root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#475569;--border:#e2e8f0;--accent:#2563eb;--green:#16a34a;--yellow:#ca8a04;--red:#dc2626}
+  [data-theme="dark"]{--bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--border:#1f2937;--accent:#22d3ee;--green:#22c55e;--yellow:#eab308;--red:#f43f5e}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
+  .container{max-width:1100px;margin:0 auto;padding:12px}
+  .top{position:sticky;top:0;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:8}
+  .row{display:flex;gap:12px;align-items:center}.between{justify-content:space-between}.grow{flex:1}
+  .brand{display:flex;gap:8px;align-items:center;font-weight:600}
+  .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#2563eb,var(--accent));color:#fff;display:grid;place-items:center}
+  .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
+  .btn{padding:8px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);cursor:pointer;font-weight:500}
+  .btn.primary{background:linear-gradient(90deg,#2563eb,var(--accent));color:#fff;border:0}
+  .grid{display:grid;gap:14px}
+  .grid.cols{grid-template-columns:1fr}
+  @media(min-width:980px){ .grid.cols{grid-template-columns:2fr 1fr} }
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card-h{padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .card-b{padding:12px}
+  .muted{color:var(--muted)}
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(2,1fr)}
+  @media(min-width:700px){.kpi{grid-template-columns:repeat(4,1fr)}}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid;font-size:11px}
+  .badge.blue{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+  .badge.green{background:#ecfdf5;color:#15803d;border-color:#bbf7d0}
+  .badge.yellow{background:#fefce8;color:#a16207;border-color:#fde68a}
+  .chart{height:240px}@media(min-width:980px){.chart{height:320px}}
+  svg{width:100%;height:100%}.axis text{fill:var(--muted);font-size:11px}.axis line{stroke:var(--border)}
+  .area{fill:url(#grad);stroke:#2563eb;stroke-width:3}.zero{stroke:#94a3b8;stroke-dasharray:4 2}[data-theme="dark"] .zero{stroke:#475569}
+  .toast{position:fixed;right:14px;bottom:14px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.15);opacity:0;transform:translateY(8px);transition:.2s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .search-wrap{display:none}@media(min-width:720px){.search-wrap{display:flex}}
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="container row">
+      <div class="brand"><div class="logo">F</div> FinSight</div>
+      <div class="search-wrap grow"><input class="input" placeholder="Otsi arveid, kliente…"></div>
+      <select id="horizon" class="select" style="max-width:140px">
+        <option value="30">30 päeva</option><option value="60">60 päeva</option><option value="90">90 päeva</option>
+      </select>
+      <button id="createBtn" class="btn primary">Loo prognoos</button>
+      <button id="darkBtn" class="btn">Tume: Väljas</button>
+      <button id="exportBtn" class="btn">Ekspordi CSV</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card" style="background:radial-gradient(80% 100% at 10% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent) var(--card);">
+      <div class="card-b">
+        <div class="row between">
+          <h1 style="margin:0;font-size:22px">Ennustav rahavoo analüütika</h1>
+          <div class="row" style="gap:6px"><span class="badge green">Prognoos aktiivne</span><span class="badge blue">AI nõustaja</span><span class="badge yellow">Beeta</span></div>
+        </div>
+        <p class="muted" style="margin:8px 0 0">Näe tulevast likviidsust, enneta riske ja tegutse ühe klõpsuga soovituse alusel.</p>
+      </div>
+    </section>
+
+    <section class="kpi" style="margin-top:12px">
+      <div class="card"><div class="card-b"><div class="muted">Prognoositav madaljääk</div><div id="kpi-low" class="title" style="font-weight:600;font-size:20px">–</div></div></div>
+      <div class="card"><div class="card-b"><div class="muted">Riskantsed arved</div><div class="title" style="font-weight:600;font-size:20px">3</div></div></div>
+      <div class="card"><div class="card-b"><div class="muted">Keskmine laekumisaeg</div><div class="title" style="font-weight:600;font-size:20px">28 p</div></div></div>
+      <div class="card"><div class="card-b"><div class="muted">Säästupotentsiaal</div><div class="title" style="font-weight:600;font-size:20px">1,8k €</div></div></div>
+    </section>
+
+    <section class="grid cols" style="margin-top:12px">
+      <div class="card" style="grid-column:span 1">
+        <div class="card-h"><div>Rahavoo prognoos</div></div>
+        <div class="card-b">
+          <div id="chart" class="chart"></div>
+          <div id="chart-note" class="muted" style="margin-top:8px;font-size:13px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><div>Hoiatused ja tegevused</div><span class="badge blue">Automaatselt loodud</span></div>
+        <div class="card-b" id="alerts"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+  // util
+  const $=s=>document.querySelector(s); const fmt=n=>n.toLocaleString("et-EE",{maximumFractionDigits:0});
+  const fDate=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'2-digit'}).format(d);
+  const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
+
+  // theme
+  function setTheme(m){document.body.setAttribute('data-theme',m);localStorage.setItem('finsight_theme',m);$("#darkBtn").textContent=`Tume: ${m==='dark'?'Sees':'Väljas'}`;drawChart()}
+  setTheme(localStorage.getItem('finsight_theme')==='dark'?'dark':'light');
+  $("#darkBtn").onclick=()=>setTheme(document.body.getAttribute('data-theme')==='dark'?'light':'dark');
+
+  // alerts demo
+  const alerts=[{type:"critical",title:"Likviidsusauk 5 päeva pärast",detail:"Jääk ei kata tarnija Z makset (2 500 €)."},
+                {type:"info",title:"Paku ettemakse soodustust",detail:"Klient Y võib maksta varem 2% soodustusega."},
+                {type:"warn",title:"Lükka tarnija X arve edasi",detail:"Lükka 1 200 € 7 päeva, et jääk püsiks positiivne."}];
+  (function(){const el=$("#alerts");alerts.forEach(a=>{const card=document.createElement('div');card.style.cssText=`border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px`;card.innerHTML=`<div style="font-weight:600">${a.title}</div><div class="muted" style="font-size:13px">${a.detail}</div>`;el.appendChild(card)});})();
+
+  // sample data
+  const d=(y,m,day)=>new Date(y,m,day);
+  const preset30=[{date:d(2025,7,21),balance:12000},{date:d(2025,7,25),balance:9800},{date:d(2025,7,29),balance:4100},{date:d(2025,8,2),balance:-2000},{date:d(2025,8,6),balance:3600},{date:d(2025,8,10),balance:8200}];
+  let data=preset30.slice();
+
+  // chart
+  function drawChart(){
+    const el=$("#chart");el.innerHTML="";
+    const w=el.clientWidth||600,h=el.clientHeight||240,p={l:46,r:10,t:10,b:26};
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox",`0 0 ${w} ${h}`);el.appendChild(svg);
+
+    const defs=document.createElementNS(svg.namespaceURI,"defs");
+    const grad=document.createElementNS(svg.namespaceURI,"linearGradient");grad.setAttribute("id","grad");grad.setAttribute("x1","0");grad.setAttribute("y1","0");grad.setAttribute("x2","0");grad.setAttribute("y2","1");
+    const g1=document.createElementNS(svg.namespaceURI,"stop");g1.setAttribute("offset","0%");g1.setAttribute("stop-color","#2563eb");g1.setAttribute("stop-opacity","0.30");
+    const g2=document.createElementNS(svg.namespaceURI,"stop");g2.setAttribute("offset","100%");g2.setAttribute("stop-color","#2563eb");g2.setAttribute("stop-opacity","0.02");
+    grad.appendChild(g1);grad.appendChild(g2);defs.appendChild(grad);svg.appendChild(defs);
+
+    const xs=data.map(d=>fDate(d.date)),ys=data.map(d=>d.balance);
+    const xstep=(w-p.l-p.r)/Math.max(1,(xs.length-1));const ymin=Math.min(0,...ys),ymax=Math.max(...ys),yspan=Math.max(1,ymax-ymin);
+    const X=i=>p.l+i*xstep,Y=v=>p.t+(h-p.t-p.b)*(1-(v-ymin)/yspan);
+
+    let dpath="";data.forEach((pt,i)=>{const px=X(i),py=Y(pt.balance);dpath+=(i===0?`M ${px} ${py}`:` L ${px} ${py}`)});
+    const y0=Y(0);if(xs.length>0){dpath+=` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;}
+    const area=document.createElementNS(svg.namespaceURI,"path");area.setAttribute("d",dpath);area.setAttribute("class","area");svg.appendChild(area);
+
+    xs.forEach((lbl,i)=>{const tx=X(i);const t=document.createElementNS(svg.namespaceURI,"text");t.setAttribute("x",tx);t.setAttribute("y",h-6);t.setAttribute("text-anchor","middle");t.textContent=lbl;svg.appendChild(t)});
+
+    const low=data.reduce((m,p)=>Math.min(m,p.balance),Infinity);
+    $("#kpi-low").textContent=Number.isFinite(low)?`${fmt(low)} €`:"–";
+    $("#chart-note").innerHTML=low<0?`Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`:`<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
+  }
+  drawChart();
+  window.addEventListener('resize',drawChart);
+</script>
+</body>
+</html>
