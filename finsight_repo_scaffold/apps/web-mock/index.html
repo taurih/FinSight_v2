@@ -4,15 +4,27 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>FinSight – Demo (päris andmete tugi)</title>
+
+<!-- 1) Varajane teema seadmine enne CSS-i, et vältida "nupp kaob" efekti -->
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('finsight_theme');
+      var mode = saved === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', mode);
+    } catch(e) { /* ignore */ }
+  })();
+</script>
+
 <style>
   :root{
     --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --accent:#2563eb;
-    --btn-bg:#ffffff; --btn-text:#0f172a; --btn-border:#e2e8f0; --btn-grad1:#2563eb; --btn-grad2:#06b6d4;
+    --btn-bg:#ffffff; --btn-text:#0f172a; --btn-border:#cbd5e1; --btn-grad1:#2563eb; --btn-grad2:#06b6d4;
     --green:#16a34a; --yellow:#ca8a04; --red:#dc2626;
   }
   [data-theme="dark"]{
     --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22d3ee;
-    --btn-bg:#0f172a; --btn-text:#e5e7eb; --btn-border:#1f2937; --btn-grad1:#0ea5e9; --btn-grad2:#14b8a6;
+    --btn-bg:#0f172a; --btn-text:#e5e7eb; --btn-border:#334155; --btn-grad1:#0ea5e9; --btn-grad2:#14b8a6;
     --green:#22c55e; --yellow:#eab308; --red:#f43f5e;
   }
   *{box-sizing:border-box}
@@ -23,10 +35,16 @@
   .brand{display:flex;gap:8px;align-items:center;font-weight:600}
   .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--btn-grad1),var(--btn-grad2));color:#fff;display:grid;place-items:center}
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
-  .btn{padding:8px 12px;border:1px solid var(--btn-border);border-radius:12px;background:var(--btn-bg);color:var(--btn-text);cursor:pointer;transition:transform .04s ease, box-shadow .15s ease}
+  .btn{
+    padding:8px 12px;border:1px solid var(--btn-border);border-radius:12px;
+    background:var(--btn-bg);color:var(--btn-text);cursor:pointer;
+    transition:transform .04s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+    box-shadow:0 1px 1px rgba(0,0,0,.04);
+  }
+  .btn:hover{box-shadow:0 3px 10px rgba(2,132,199,.08)}
   .btn:active{transform:translateY(1px)}
   .btn.primary{background:linear-gradient(90deg,var(--btn-grad1),var(--btn-grad2));color:#fff;border:0;font-weight:600;box-shadow:0 4px 12px rgba(2,132,199,.25)}
-  .btn.ghost{background:var(--btn-bg)}
+  .btn.ghost{background:var(--btn-bg); color:var(--btn-text); border:1px solid var(--btn-border)}
   .grid{display:grid;gap:14px}
   .grid.cols{grid-template-columns:1fr}
   @media(min-width:980px){ .grid.cols{grid-template-columns:2fr 1fr} }
@@ -127,13 +145,18 @@
 
   // ==== teema ====
   function setTheme(m){
-    document.body.setAttribute('data-theme',m);
-    localStorage.setItem('finsight_theme',m);
-    $("#darkBtn").textContent = `Tume: ${m==='dark'?'Sees':'Väljas'}`;
-    drawChart();
+    document.documentElement.setAttribute('data-theme',m);
+    try { localStorage.setItem('finsight_theme',m); } catch(e){}
+    const btn = $("#darkBtn");
+    if(btn) btn.textContent = `Tume: ${m==='dark'?'Sees':'Väljas'}`;
+    drawChart(); // värskenda värvid
   }
-  setTheme(localStorage.getItem('finsight_theme')==='dark'?'dark':'light');
-  $("#darkBtn").onclick=()=>setTheme(document.body.getAttribute('data-theme')==='dark'?'light':'dark');
+  (function initThemeAfterPaint(){
+    // Sünkroniseeri nupu tekst varajase režiimiga
+    const current = document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light';
+    setTheme(current);
+  })();
+  $("#darkBtn").onclick=()=>setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
 
   // ==== seisund ====
   let range=30;
@@ -153,7 +176,6 @@
       // varuandmed, kui demo.json puudub
       raw = {
         startingBalance: 5000,
-        // Cash-sündmused: positiivne = laekumine, negatiivne = väljaminek
         cashEvents: [
           { date:"2025-08-21", amount: 3000, client:"Klient A", actual:true },
           { date:"2025-08-25", amount:-4200, client:"Tarnija Z", actual:true },
@@ -162,11 +184,10 @@
           { date:"2025-09-06", amount: 5600, client:"Klient C", actual:false },
           { date:"2025-09-10", amount: 2400, client:"Klient A", actual:false }
         ],
-        // Arved DSO jaoks (lihtsustatud)
         invoices: [
           { issueDate:"2025-08-01", dueDate:"2025-08-14", paidDate:"2025-08-12", amount:1800, client:"Klient A" },
           { issueDate:"2025-08-10", dueDate:"2025-08-24", paidDate:"2025-09-01", amount:2400, client:"Klient B" },
-          { issueDate:"2025-08-22", dueDate:"2025-09-05",                 amount:2600, client:"Klient C" } // maksmata
+          { issueDate:"2025-08-22", dueDate:"2025-09-05",                 amount:2600, client:"Klient C" }
         ]
       };
     }
@@ -185,7 +206,6 @@
       client:    v.client||"—"
     })) : [];
 
-    // 1) Kui cashEvents olemas, kasuta neid otseselt
     if(Array.isArray(raw.cashEvents) && raw.cashEvents.length){
       raw.cashEvents.forEach(ev=>{
         if(!ev.date) return;
@@ -198,38 +218,31 @@
         });
       });
     }else{
-      // 2) Vastasel juhul sünteesi sündmused arvetest:
       invoices.forEach(inv=>{
-        if(inv.paidDate){ // tasutud -> tegelik laekumine tasumise kuupäeval
+        if(inv.paidDate){
           events.push({date:inv.paidDate, amount:inv.amount, client:inv.client, actual:true, note:"Tasumine"});
-        }else if(inv.dueDate){ // maksmata -> prognoos dueDate kuupäeval
+        }else if(inv.dueDate){
           events.push({date:inv.dueDate, amount:inv.amount, client:inv.client, actual:false, note:"Prognoos"});
         }
       });
     }
 
-    // Sort ja agregeeri sama päeva summad kokku
     const byDay = new Map();
     events.forEach(ev=>{
       const k = +ev.date;
       const cur = byDay.get(k) || {date:ev.date, amount:0, clients:new Set(), actual:true};
       cur.amount += ev.amount;
       cur.clients.add(ev.client);
-      cur.actual = cur.actual && ev.actual; // kui ükski on prognoos, muutub prognoosiks
+      cur.actual = cur.actual && ev.actual;
       byDay.set(k, cur);
     });
 
-    // Series: kumulatiivne algsaldoga
     const start = Number(raw.startingBalance||0);
     const rows = [...byDay.values()].sort((a,b)=>a.date-b.date);
     let run = start;
-    series = rows.map(r=>{
-      run += r.amount;
-      return { date: r.date, balance: run, actual: r.actual };
-    });
+    series = rows.map(r=>{ run += r.amount; return { date:r.date, balance:run, actual:r.actual }; });
 
     if(!series.length){
-      // kui midagi siiski ei tekkinud, lisa startpunkt
       const today=new Date(); today.setHours(0,0,0,0);
       series = [{date: today, balance: start, actual:true}];
     }
@@ -247,7 +260,7 @@
     toast(`Prognoos loodud ${r} päevaks`);
   }
 
-  // KPI-d: madaljääk, riskantsed arved, DSO, säästupotentsiaal
+  // KPI-d
   function refreshKPIs(){
     if(!visible.length){
       $("#kpi-low").textContent = "–";
@@ -257,7 +270,6 @@
       $("#chart-note").textContent = "";
       return;
     }
-    // madaljääk
     const low = visible.reduce((m,p)=>Math.min(m,p.balance), Infinity);
     $("#kpi-low").textContent = Number.isFinite(low)? `${fmt(low)} €` : "–";
     $("#result-low") && ($("#result-low").textContent = Number.isFinite(low)? `${fmt(low)} €` : "–");
@@ -265,22 +277,19 @@
       ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
       : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
 
-    // riskantsed: päevad, kus prognoos langeb alla 0 (mitte-actual)
     const riskDays = visible.filter(p=>!p.actual && p.balance<0).length;
     $("#kpi-risk").textContent = String(riskDays);
 
-    // DSO: keskmine (paidDate - issueDate) tasutud arvetele
     const paid = invoices.filter(i=>i.issueDate && i.paidDate);
-    const dso = paid.length ? Math.round(paid.reduce((s,i)=>s+daysBetween(i.issueDate,i.paidDate),0)/paid.length) : null;
+    const dso = paid.length ? Math.round(paid.reduce((s,i)=>s+((i.paidDate - i.issueDate)/(1000*60*60*24)),0)/paid.length) : null;
     $("#kpi-dso").textContent = dso!=null ? `${dso} p` : "–";
 
-    // säästupotentsiaal: lihtne näide – 2% kõigist maksmata arvetest (receivables)
     const receivables = invoices.filter(i=>!i.paidDate).reduce((s,i)=>s+(i.amount||0),0);
     const savings = Math.round(receivables*0.02);
     $("#kpi-savings").textContent = `${fmt(savings)} €`;
   }
 
-  // What-IF mõjutaja: süvendab ühte madalpunkti (lihtne demo)
+  // What-IF
   function applyWhatIf(){
     if(!series.length) return;
     const dly = parseInt($("#delay").value||'0',10);
@@ -288,9 +297,7 @@
     $("#delay-val").textContent = String(dly);
     $("#discount-val").textContent = String(disc);
 
-    // leia seeriast madalaim punkt (ainult prognoositud)
     const idx = series.reduce((best,i,ix,arr)=>{
-      if(!i) return best;
       if(arr[best]===undefined) return ix;
       if(i.balance < arr[best].balance && !i.actual) return ix;
       return best;
@@ -299,11 +306,10 @@
     if(idx>=0){
       const factor = 1 + Math.min(.5, dly*.05) - Math.min(.3, disc*.03);
       const delta  = Math.round(series[idx].balance * (factor-1));
-      // rakenda delta kõigile sellele päevale ja edasi, et kumulatiivne säiliks
       for(let i=idx;i<series.length;i++){
         series[i] = {...series[i], balance: series[i].balance + delta};
       }
-      setRange(range); // uuenda visible & KPI & chart
+      setRange(range);
     }
     toast("Stsenaarium uuendatud");
   }
@@ -316,7 +322,6 @@
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.setAttribute("viewBox",`0 0 ${w} ${h}`); el.appendChild(svg);
 
-    // gradient
     const defs=document.createElementNS(svg.namespaceURI,"defs");
     const grad=document.createElementNS(svg.namespaceURI,"linearGradient");
     grad.setAttribute("id","grad"); grad.setAttribute("x1","0"); grad.setAttribute("y1","0"); grad.setAttribute("x2","0"); grad.setAttribute("y2","1");
@@ -329,12 +334,10 @@
     const ymin=Math.min(0,...ys), ymax=Math.max(...ys), yspan=Math.max(1,ymax-ymin);
     const X=i=>p.l+i*xstep, Y=v=>p.t+(h-p.t-p.b)*(1-(v-ymin)/yspan);
 
-    // telg + harvendus
     const axis=document.createElementNS(svg.namespaceURI,"g"); axis.setAttribute("class","axis");
     const maxTicks=8, step=Math.max(1,Math.ceil(xs.length/maxTicks));
     xs.forEach((lbl,i)=>{
       const tx=X(i);
-      // grid
       const gl=document.createElementNS(svg.namespaceURI,"line");
       gl.setAttribute("x1",tx); gl.setAttribute("x2",tx); gl.setAttribute("y1",p.t); gl.setAttribute("y2",h-p.b);
       gl.setAttribute("stroke","var(--border)"); gl.setAttribute("stroke-dasharray","3 3"); axis.appendChild(gl);
@@ -353,7 +356,6 @@
     }
     svg.appendChild(axis);
 
-    // ala
     if(xs.length){
       let dpath=""; visible.forEach((pt,i)=>{const px=X(i),py=Y(pt.balance); dpath+=(i===0?`M ${px} ${py}`:` L ${px} ${py}`)});
       const y0=Y(0); dpath+=` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;
@@ -362,7 +364,7 @@
     }
   }
 
-  // CSV eksport: kuupäev, kumulatiiv, märkus (Tegelik/Prognoos)
+  // CSV
   $("#exportBtn").onclick=()=>{
     if(!series.length){ toast("Pole midagi eksportida"); return; }
     const rows=[["Kuupäev","Kumulatiivne jääk (€)","Märkus"]];
@@ -379,7 +381,7 @@
 
   // Nupud
   $("#createBtn").onclick=()=>{ const r=parseInt($("#horizon").value,10); setRange(r); };
-  $("#rerun")?.addEventListener('click',applyWhatIf);
+  $("#rerun")?.addEventListener('click',()=>{ applyWhatIf(); });
   $("#delay")?.addEventListener('input',e=>$("#delay-val").textContent=e.target.value);
   $("#discount")?.addEventListener('input',e=>$("#discount-val").textContent=e.target.value);
   window.addEventListener('resize',drawChart);
@@ -388,8 +390,7 @@
   (async function init(){
     await loadData();
     buildEventsFromRaw();
-    setRange(30); // vaikimisi 30p
-    // Alerts demo
+    setRange(30);
     const alerts=[
       {type:"critical",title:"Likviidsusauk prognoosis",detail:"Jääk langeb alla 0 valitud horisondis."},
       {type:"info",title:"Paku ettemakse soodustust",detail:"Hilinenud klientidele 2% soodustus võib kiirendada."},
