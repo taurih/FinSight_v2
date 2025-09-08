@@ -16,19 +16,25 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
   .container{max-width:1100px;margin:0 auto;padding:12px}
-  .top{position:sticky;top:0;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:8}
+
+  /* Päis: soliidne taust (ei kattu allolevaga), kerge vari, lisapadding */
+  .top{
+    position:sticky;top:0;
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    box-shadow:0 1px 0 var(--border);
+    z-index:8;
+    padding-block:8px;
+  }
+
   .row{display:flex;gap:10px;align-items:center}
   .between{justify-content:space-between}.grow{flex:1}
-  .brand{display:flex;gap:8px;align-items:center;font-weight:600}
 
-  /* Logo – laiendatud versioon (pilt sisaldab teksti) */
-  .logo{
-    height:40px; display:grid; place-items:center;
-    background:transparent; padding:0;
-  }
-  .logo.wide{ width:140px; }
-  .logo-img{ width:100%; height:100%; object-fit:contain; display:block; }
-  [data-theme="dark"] .logo{ background:transparent; }
+  /* Brändirida + logo (pilt sisaldab teksti) */
+  .brand{display:flex;align-items:center;min-width:172px;}
+  .logo{width:172px;height:34px;display:block;overflow:hidden}
+  .logo-img{width:100%;height:100%;object-fit:contain;display:block}
+  [data-theme="dark"] .logo{background:transparent}
 
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
 
@@ -81,7 +87,7 @@
   <header class="top">
     <div class="container row">
       <div class="brand">
-        <div class="logo wide">
+        <div class="logo">
           <img src="FinSightlogo.png" alt="FinSight logo" class="logo-img" decoding="async"/>
         </div>
       </div>
@@ -522,7 +528,7 @@
       const usual = meta.usual_payment_days ?? null;
       const issues = meta.past_issues ?? 0;
 
-      const neg = (c.data||[]).filter(p=>{
+    const neg = (c.data||[]).filter(p=>{
         const v = Number(p.balance)||0;
         return v < 0 && inWindow(p.date, start, end);
       });
