@@ -23,20 +23,15 @@
   .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#2563eb,var(--accent));color:#fff;display:grid;place-items:center}
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
 
-  /* ——— Nupud (parandatud kontrast tumerežiimis) ——— */
+  /* ——— Nupud (kontrast tumerežiimis) ——— */
   .btn{
     padding:8px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);
     color:var(--text);cursor:pointer;transition:background .2s,color .2s, border-color .2s, box-shadow .2s
   }
   .btn:hover{background:color-mix(in srgb,var(--accent) 10%, var(--card));}
   .btn.primary{background:linear-gradient(90deg,#2563eb,var(--accent));color:#fff;border:0;font-weight:600}
-  [data-theme="dark"] .btn{
-    background:#1f2937;color:#f1f5f9;border-color:#334155;
-  }
-  [data-theme="dark"] .btn:hover{
-    background:#273347; /* veidi heledam hover */
-  }
-  /* rõhuta ainult tumerežiimi lülitit, et see ei kaoks tausta sisse */
+  [data-theme="dark"] .btn{background:#1f2937;color:#f1f5f9;border-color:#334155}
+  [data-theme="dark"] .btn:hover{background:#273347}
   #darkBtn{font-weight:600}
   [data-theme="dark"] #darkBtn{
     background:linear-gradient(90deg,#2563eb,#22d3ee); color:#fff; border:0;
@@ -110,9 +105,9 @@
     <!-- KPI -->
     <section class="kpi" style="margin-top:12px">
       <div class="card"><div class="card-b"><div class="label">Prognoositav madaljääk</div><div id="kpi-low" class="value">–</div></div></div>
-      <div class="card"><div class="card-b"><div class="label">Riskantsed arved</div><div class="value">3</div></div></div>
-      <div class="card"><div class="card-b"><div class="label">Keskmine laekumisaeg (DSO)</div><div class="value">28 p</div></div></div>
-      <div class="card"><div class="card-b"><div class="label">Säästupotentsiaal</div><div class="value">1,8k €</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Riskantsed päevad</div><div id="kpi-risk" class="value">–</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Keskmine laekumisaeg</div><div id="kpi-dso" class="value">–</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Säästupotentsiaal</div><div id="kpi-savings" class="value">–</div></div></div>
     </section>
 
     <section class="grid cols" style="margin-top:12px">
@@ -166,6 +161,13 @@
   const preset60=preset30.concat([{date:d(2025,8,14),balance:6200},{date:d(2025,8,20),balance:10400},{date:d(2025,8,28),balance:7300}]);
   const preset90=preset60.concat([{date:d(2025,9,5),balance:9100},{date:d(2025,9,12),balance:6600},{date:d(2025,9,20),balance:11800}]);
 
+  // Demo arved DSO jaoks (issue/due/paid). Kui paidDate puudub, on arve veel tasumata.
+  const demoInvoices = [
+    { issue:"2025-08-01", due:"2025-08-14", paid:"2025-08-12", amount:1800, client:"Klient A" },
+    { issue:"2025-08-10", due:"2025-08-24", paid:"2025-09-01", amount:2400, client:"Klient B" },
+    { issue:"2025-08-22", due:"2025-09-05", /*unpaid*/ amount:2600, client:"Klient C" }
+  ];
+
   const clients=[
     {name:"Klient A",scale:1.00,offset:0},
     {name:"Klient B",scale:0.65,offset:-400},
@@ -173,10 +175,12 @@
   ];
 
   // ======= STATE & ABID =======
-  let range=30, clientsState=[];
+  let range=30, clientsState=[], lastSavings=0;
+
   const seriesFor=(r,s,o)=>({30:preset30,60:preset60,90:preset90}[r]).map(p=>({date:new Date(p.date),balance:Math.round(p.balance*s+o)}));
   function rebuild(){clientsState=clients.map(c=>{const base=seriesFor(range,c.scale,c.offset);return {name:c.name,baseData:base,data:base.map(x=>({...x}))}})}
   function aggregate(kind){const map=new Map();clientsState.forEach(c=>(kind==='base'?c.baseData:c.data).forEach(p=>{const k=+p.date;map.set(k,(map.get(k)||0)+p.balance)}));return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([k,sum])=>({date:new Date(+k),balance:sum}))}
+  const daysBetween=(a,b)=>Math.round((b-a)/86400000);
 
   // ======= TUME/HELE REŽIIM =======
   function setTheme(mode){
@@ -210,12 +214,25 @@
   const delay=$("#delay"),discount=$("#discount"),delayVal=$("#delay-val"),discountVal=$("#discount-val");
   delay.oninput=()=>delayVal.textContent=delay.value;
   discount.oninput=()=>discountVal.textContent=discount.value;
+
   $("#rerun").addEventListener('click',simulate);
+
   function simulate(){
     const dly=+delay.value||0, disc=+discount.value||0;
+    // baseline enne simulatsiooni (säästupotentsiaali võrdluseks)
+    const baseSeries = aggregate('base');
+    const baseMin = baseSeries.reduce((m,p)=>Math.min(m,p.balance),Infinity);
+
+    // rakenda simulatsioon
     const factor=1+Math.min(.5,dly*.05)-Math.min(.3,disc*.03);
     const pivot=+new Date(2025,8,2);
     clientsState=clientsState.map(c=>({...c,data:c.baseData.map(pt=>(+pt.date===pivot)?{...pt,balance:Math.round(pt.balance*factor)}:{...pt})}));
+
+    // uue prognoosi min + säästupotentsiaal (paranemine)
+    const simSeries = aggregate('forecast');
+    const simMin = simSeries.reduce((m,p)=>Math.min(m,p.balance),Infinity);
+    lastSavings = Math.max(0, simMin - baseMin); // kui min paranes (väiksem auk), näita paranemist €
+
     refresh(); toast("Stsenaarium uuendatud");
   }
 
@@ -226,7 +243,7 @@
     initRange(r); toast(`Prognoos loodud ${r} päevaks`);
   };
 
-  // ======= CSV EKSPORT =======
+  // ======= CSV EKSPORT (säilitame olemasoleva nupu käitumise) =======
   document.getElementById('exportBtn').onclick=()=>{
     const today=new Date(); today.setHours(0,0,0,0);
     const rows=[["Kuupäev","Kliendi nimi","Tegelik jääk (€)","Prognoositud jääk (€)","Märkus"]];
@@ -328,13 +345,51 @@
     svg.appendChild(zero);
   }
 
+  function computeRiskDays(series){
+    // Lihtne heuristika: päevad, kus prognoositud agregaatjääk < 0
+    return series.reduce((acc,p)=> acc + (p.balance < 0 ? 1 : 0), 0);
+  }
+
+  function computeDSO(invoices, windowEnd, daysWindow){
+    // DSO = keskmine tasumise aeg (paidDate - issueDate) valitud aknas; tasumata → praeguse kuupäevani
+    const windowStart = new Date(+windowEnd - daysWindow*86400000);
+    const inWindow = invoices.filter(inv=>{
+      const issue = new Date(inv.issue);
+      return issue >= windowStart && issue <= windowEnd;
+    });
+    if(!inWindow.length) return null;
+    const today = windowEnd;
+    const avg = inWindow.reduce((sum,inv)=>{
+      const issue = new Date(inv.issue);
+      const paid  = inv.paid ? new Date(inv.paid) : today;
+      return sum + Math.max(0, daysBetween(issue, paid));
+    },0) / inWindow.length;
+    return Math.round(avg);
+  }
+
   function refresh(){
-    const s=aggregate('forecast');
-    const low=s.reduce((m,p)=>Math.min(m,p.balance),Infinity);
+    const sForecast = aggregate('forecast');
+    const sBase     = aggregate('base');
+
+    // KPI: madaljääk
+    const low=sForecast.reduce((m,p)=>Math.min(m,p.balance),Infinity);
     $("#kpi-low").textContent=Number.isFinite(low)?`${fmt(low)} €`:"–";
     $("#chart-note").innerHTML=low<0
       ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
       : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
+
+    // KPI: riskantsed päevad
+    const riskDays = computeRiskDays(sForecast);
+    $("#kpi-risk").textContent = `${riskDays}`;
+
+    // KPI: säästupotentsiaal (paranemine vs. baseline)
+    $("#kpi-savings").textContent = lastSavings > 0 ? `${fmt(lastSavings)} €` : "0 €";
+
+    // KPI: DSO (kasutame demoInvoices; aken vastab valitud horisondile, lõpp = viimane sForecast kuupäev)
+    const windowEnd = sForecast.length ? sForecast[sForecast.length-1].date : new Date();
+    const dso = computeDSO(demoInvoices, windowEnd, range);
+    $("#kpi-dso").textContent = (dso==null) ? "–" : `${dso} p`;
+
     drawChart();
   }
 
