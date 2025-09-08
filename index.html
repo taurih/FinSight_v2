@@ -3,67 +3,79 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>FinSight – CSV/JSON import + demo</title>
-
-<!-- Varajane teema seadmine -->
-<script>
-  (function () {
-    try {
-      var saved = localStorage.getItem('finsight_theme');
-      var mode = saved === 'dark' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', mode);
-    } catch(e) {}
-  })();
-</script>
-
+<title>FinSight – Responsiivne eelvaade</title>
 <style>
   :root{
-    --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --accent:#2563eb;
-    --btn-bg:#ffffff; --btn-text:#0f172a; --btn-border:#cbd5e1; --btn-grad1:#2563eb; --btn-grad2:#06b6d4;
-    --green:#16a34a; --yellow:#ca8a04; --red:#dc2626;
+    --bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#475569;--border:#e2e8f0;
+    --accent:#2563eb;--green:#16a34a;--yellow:#ca8a04;--red:#dc2626
   }
   [data-theme="dark"]{
-    --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22d3ee;
-    --btn-bg:#0f172a; --btn-text:#e5e7eb; --btn-border:#334155; --btn-grad1:#0ea5e9; --btn-grad2:#14b8a6;
-    --green:#22c55e; --yellow:#eab308; --red:#f43f5e;
+    --bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--border:#1f2937;
+    --accent:#22d3ee;--green:#22c55e;--yellow:#eab308;--red:#f43f5e
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
   .container{max-width:1100px;margin:0 auto;padding:12px}
   .top{position:sticky;top:0;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:8}
-  .row{display:flex;gap:12px;align-items:center}.between{justify-content:space-between}.grow{flex:1}
+  .row{display:flex;gap:10px;align-items:center}
+  .between{justify-content:space-between}.grow{flex:1}
   .brand{display:flex;gap:8px;align-items:center;font-weight:600}
-  .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--btn-grad1),var(--btn-grad2));color:#fff;display:grid;place-items:center}
+  .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#2563eb,var(--accent));color:#fff;display:grid;place-items:center}
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
+
+  /* ——— Nupud (parandatud kontrast tumerežiimis) ——— */
   .btn{
-    padding:8px 12px;border:1px solid var(--btn-border);border-radius:12px;
-    background:var(--btn-bg);color:var(--btn-text);cursor:pointer;
-    transition:transform .04s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
-    box-shadow:0 1px 1px rgba(0,0,0,.04)
+    padding:8px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);
+    color:var(--text);cursor:pointer;transition:background .2s,color .2s, border-color .2s, box-shadow .2s
   }
-  .btn:hover{box-shadow:0 3px 10px rgba(2,132,199,.08)}
-  .btn:active{transform:translateY(1px)}
-  .btn.primary{background:linear-gradient(90deg,var(--btn-grad1),var(--btn-grad2));color:#fff;border:0;font-weight:600;box-shadow:0 4px 12px rgba(2,132,199,.25)}
-  .btn.ghost{background:var(--btn-bg); color:var(--btn-text); border:1px solid var(--btn-border)}
-  .grid{display:grid;gap:14px}
+  .btn:hover{background:color-mix(in srgb,var(--accent) 10%, var(--card));}
+  .btn.primary{background:linear-gradient(90deg,#2563eb,var(--accent));color:#fff;border:0;font-weight:600}
+  [data-theme="dark"] .btn{
+    background:#1f2937;color:#f1f5f9;border-color:#334155;
+  }
+  [data-theme="dark"] .btn:hover{
+    background:#273347; /* veidi heledam hover */
+  }
+  /* rõhuta ainult tumerežiimi lülitit, et see ei kaoks tausta sisse */
+  #darkBtn{font-weight:600}
+  [data-theme="dark"] #darkBtn{
+    background:linear-gradient(90deg,#2563eb,#22d3ee); color:#fff; border:0;
+    box-shadow:0 1px 2px rgba(0,0,0,.25)
+  }
+
+  .grid{display:grid;gap:12px}
   .grid.cols{grid-template-columns:1fr}
   @media(min-width:980px){ .grid.cols{grid-template-columns:2fr 1fr} }
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .card-h{padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
-  .card-b{padding:12px}
+  .card-h{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .card-b{padding:10px 12px}
   .muted{color:var(--muted)}
-  .kpi{display:grid;gap:10px;grid-template-columns:1fr 1fr}
-  @media(min-width:760px){ .kpi{grid-template-columns:repeat(4,1fr)}}
+
+  /* KOMPAKTNE KPI */
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(2,1fr)}
+  @media(min-width:900px){ .kpi{grid-template-columns:repeat(4,1fr)} }
+  .kpi .label{font-size:12px;color:var(--muted);line-height:1.2}
+  .kpi .value{font-weight:700;font-size:18px;margin-top:4px}
+  @media(min-width:900px){ .kpi .value{font-size:20px} }
+
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid;font-size:11px}
   .badge.blue{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
   .badge.green{background:#ecfdf5;color:#15803d;border-color:#bbf7d0}
   .badge.yellow{background:#fefce8;color:#a16207;border-color:#fde68a}
-  .chart{height:240px}@media(min-width:980px){.chart{height:320px}}
-  svg{width:100%;height:100%}.axis text{fill:var(--muted);font-size:12px}.axis line{stroke:var(--border)}
-  .area{fill:url(#grad);stroke:var(--accent);stroke-width:3}.zero{stroke:#94a3b8;stroke-dasharray:4 2}[data-theme="dark"] .zero{stroke:#475569}
+
+  .chart{height:240px}
+  @media(min-width:980px){.chart{height:320px}}
+  svg{width:100%;height:100%}
+  .axis text{fill:var(--muted);font-size:12px}
+  .axis line{stroke:var(--border)}
+  .area{fill:url(#grad);stroke:#2563eb;stroke-width:3}
+  .zero{stroke:#94a3b8;stroke-dasharray:4 2}
+  [data-theme="dark"] .zero{stroke:#475569}
+
   .toast{position:fixed;right:14px;bottom:14px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.15);opacity:0;transform:translateY(8px);transition:.2s}
   .toast.show{opacity:1;transform:translateY(0)}
-  .search-wrap{display:none}@media(min-width:720px){.search-wrap{display:flex}}
+  .search-wrap{display:none}
+  @media(min-width:720px){.search-wrap{display:flex}}
 </style>
 </head>
 <body>
@@ -71,17 +83,12 @@
     <div class="container row">
       <div class="brand"><div class="logo">F</div> FinSight</div>
       <div class="search-wrap grow"><input class="input" placeholder="Otsi arveid, kliente…"></div>
-
-      <button id="loadSampleBtn" class="btn ghost" title="Laadi näidisandmed">Laadi näidisandmed</button>
-      <button id="importBtn" class="btn ghost" title="Impordi CSV/JSON">Impordi CSV/JSON</button>
-      <input id="fileInput" type="file" accept=".json,.csv,text/csv,application/json" style="display:none"/>
-
       <select id="horizon" class="select" style="max-width:140px">
-        <option value="30">30 päeva</option><option value="60">60 päeva</option><option value="90">90 päeva</option>
+        <option value="30" selected>30 päeva</option><option value="60">60 päeva</option><option value="90">90 päeva</option>
       </select>
       <button id="createBtn" class="btn primary">Loo prognoos</button>
-      <button id="darkBtn" class="btn ghost">Tume: Väljas</button>
-      <button id="exportBtn" class="btn ghost">Ekspordi CSV</button>
+      <button id="darkBtn" class="btn">Tume: Väljas</button>
+      <button id="exportBtn" class="btn">Ekspordi CSV</button>
     </div>
   </header>
 
@@ -90,17 +97,22 @@
       <div class="card-b">
         <div class="row between">
           <h1 style="margin:0;font-size:22px">Ennustav rahavoo analüütika</h1>
-          <div class="row" style="gap:6px"><span class="badge green">Prognoos aktiivne</span><span class="badge blue">AI nõustaja</span><span class="badge yellow">Beeta</span></div>
+          <div class="row" style="gap:6px">
+            <span class="badge green">Prognoos aktiivne</span>
+            <span class="badge blue">AI nõustaja</span>
+            <span class="badge yellow">Beeta</span>
+          </div>
         </div>
         <p class="muted" style="margin:8px 0 0">Näe tulevast likviidsust, enneta riske ja tegutse ühe klõpsuga soovituse alusel.</p>
       </div>
     </section>
 
+    <!-- KPI -->
     <section class="kpi" style="margin-top:12px">
-      <div class="card"><div class="card-b"><div class="muted">Prognoositav madaljääk</div><div id="kpi-low" class="title" style="font-weight:600;font-size:20px">–</div></div></div>
-      <div class="card"><div class="card-b"><div class="muted">Riskantsed arved</div><div id="kpi-risk" class="title" style="font-weight:600;font-size:20px">–</div></div></div>
-      <div class="card"><div class="card-b"><div class="muted">Keskmine laekumisaeg</div><div id="kpi-dso" class="title" style="font-weight:600;font-size:20px">–</div></div></div>
-      <div class="card"><div class="card-b"><div class="muted">Säästupotentsiaal</div><div id="kpi-savings" class="title" style="font-weight:600;font-size:20px">–</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Prognoositav madaljääk</div><div id="kpi-low" class="value">–</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Riskantsed arved</div><div class="value">3</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Keskmine laekumisaeg (DSO)</div><div class="value">28 p</div></div></div>
+      <div class="card"><div class="card-b"><div class="label">Säästupotentsiaal</div><div class="value">1,8k €</div></div></div>
     </section>
 
     <section class="grid cols" style="margin-top:12px">
@@ -144,278 +156,88 @@
   // ==== util ====
   const $=s=>document.querySelector(s);
   const fmt=n=>n.toLocaleString("et-EE",{maximumFractionDigits:0});
-  const fDDMM=d=>{const dd=String(d.getDate()).padStart(2,'0');const mm=String(d.getMonth()+1).padStart(2,'0');return `${dd}.${mm}`};
+  const fDate=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'long'}).format(d);
+  const fDateShort=d=>new Intl.DateTimeFormat('et-EE',{day:'2-digit',month:'2-digit'}).format(d);
   const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
 
-  // ==== teema ====
-  function setTheme(m){
-    document.documentElement.setAttribute('data-theme',m);
-    try { localStorage.setItem('finsight_theme',m); } catch(e){}
-    const btn = $("#darkBtn");
-    if(btn) btn.textContent = `Tume: ${m==='dark'?'Sees':'Väljas'}`;
+  // ======= DEMO ANDMED =======
+  const d=(y,m,day)=>new Date(y,m,day);
+  const preset30=[{date:d(2025,7,21),balance:12000},{date:d(2025,7,25),balance:9800},{date:d(2025,7,29),balance:4100},{date:d(2025,8,2),balance:-2000},{date:d(2025,8,6),balance:3600},{date:d(2025,8,10),balance:8200}];
+  const preset60=preset30.concat([{date:d(2025,8,14),balance:6200},{date:d(2025,8,20),balance:10400},{date:d(2025,8,28),balance:7300}]);
+  const preset90=preset60.concat([{date:d(2025,9,5),balance:9100},{date:d(2025,9,12),balance:6600},{date:d(2025,9,20),balance:11800}]);
+
+  const clients=[
+    {name:"Klient A",scale:1.00,offset:0},
+    {name:"Klient B",scale:0.65,offset:-400},
+    {name:"Klient C",scale:0.40,offset:-900}
+  ];
+
+  // ======= STATE & ABID =======
+  let range=30, clientsState=[];
+  const seriesFor=(r,s,o)=>({30:preset30,60:preset60,90:preset90}[r]).map(p=>({date:new Date(p.date),balance:Math.round(p.balance*s+o)}));
+  function rebuild(){clientsState=clients.map(c=>{const base=seriesFor(range,c.scale,c.offset);return {name:c.name,baseData:base,data:base.map(x=>({...x}))}})}
+  function aggregate(kind){const map=new Map();clientsState.forEach(c=>(kind==='base'?c.baseData:c.data).forEach(p=>{const k=+p.date;map.set(k,(map.get(k)||0)+p.balance)}));return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([k,sum])=>({date:new Date(+k),balance:sum}))}
+
+  // ======= TUME/HELE REŽIIM =======
+  function setTheme(mode){
+    document.body.setAttribute('data-theme',mode);
+    localStorage.setItem('finsight_theme',mode);
+    $("#darkBtn").textContent=`Tume: ${mode==='dark'?'Sees':'Väljas'}`;
     drawChart();
   }
-  (function syncThemeOnStart(){
-    const current = document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light';
-    setTheme(current);
+  (function initTheme(){
+    const saved=localStorage.getItem('finsight_theme');
+    setTheme(saved==='dark'?'dark':'light');
+    $("#darkBtn").onclick=()=>setTheme(document.body.getAttribute('data-theme')==='dark'?'light':'dark');
   })();
-  $("#darkBtn").onclick=()=>setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
 
-  // ==== seisund ====
-  let range=30;
-  let raw={};           // laetud JSON/CSV tõlgendus
-  let events=[];        // {date: Date, amount: number, client?: string, actual?:boolean}
-  let invoices=[];      // {issueDate,dueDate,paidDate?,amount,client}
-  let series=[];        // kumulatiivne seeria (alates startingBalance)
-  let visible=[];       // valitud horisondi lõik
-
-  // ==== CSV parser (lihtne) ====
-  function parseCSV(text){
-    // toetab ; või , eraldajat, tsiteeringuid
-    const lines=text.replace(/\r/g,'').split('\n').filter(Boolean);
-    if(!lines.length) return [];
-    const sep = (lines[0].includes(';') && !lines[0].includes(',')) ? ';' : ',';
-    const header = lines[0].split(sep).map(h=>h.trim());
-    const rows = [];
-    for(let i=1;i<lines.length;i++){
-      const row = [];
-      let s=lines[i], cur='', inQ=false;
-      for(let j=0;j<s.length;j++){
-        const ch=s[j];
-        if(ch==='"' ){ if(inQ && s[j+1]==='"'){cur+='"'; j++;} else {inQ=!inQ;} }
-        else if(ch===sep && !inQ){ row.push(cur); cur=''; }
-        else { cur+=ch; }
-      }
-      row.push(cur);
-      const obj={};
-      header.forEach((h,ix)=>obj[h]= (row[ix]??'').trim());
-      rows.push(obj);
-    }
-    return rows;
-  }
-
-  // ==== andmete tõlgendamine ====
-  function toDate(s){ const d = new Date(s); if(isNaN(+d)) return null; d.setHours(0,0,0,0); return d; }
-
-  function loadFromJSON(obj){
-    raw = obj || {};
-    buildFromRaw();
-  }
-
-  function loadFromCSVRows(rows){
-    // Autodetektsioon headerite järgi:
-    const cols = Object.keys(rows[0]||{});
-    const hasCash = ['date','amount'].every(k=>cols.includes(k));
-    const hasInv  = ['issueDate','dueDate','amount'].every(k=>cols.includes(k));
-
-    raw = { startingBalance: 0, cashEvents: [], invoices: [] };
-
-    if(hasCash){
-      rows.forEach(r=>{
-        raw.cashEvents.push({
-          date: r.date,
-          amount: Number(r.amount||0),
-          client: r.client||'—',
-          actual: String(r.actual||'').toLowerCase().startsWith('t') || r.actual==='1'
-        });
-      });
-    }
-    if(hasInv){
-      rows.forEach(r=>{
-        raw.invoices.push({
-          issueDate: r.issueDate,
-          dueDate: r.dueDate,
-          paidDate: r.paidDate || null,
-          amount: Number(r.amount||0),
-          client: r.client||'—'
-        });
-      });
-    }
-    // startingBalance püüa kätte võtta, kui on veerg 'startingBalance' esimesel real
-    if(cols.includes('startingBalance')){
-      const v = Number(rows[0].startingBalance);
-      if(!isNaN(v)) raw.startingBalance = v;
-    }
-    buildFromRaw();
-  }
-
-  function buildFromRaw(){
-    // invoices
-    invoices = Array.isArray(raw.invoices)? raw.invoices.map(v=>({
-      issueDate: v.issueDate?toDate(v.issueDate):null,
-      dueDate:   v.dueDate?toDate(v.dueDate):null,
-      paidDate:  v.paidDate?toDate(v.paidDate):null,
-      amount:    Number(v.amount||0),
-      client:    v.client||"—"
-    })) : [];
-
-    // events
-    events = [];
-    if(Array.isArray(raw.cashEvents) && raw.cashEvents.length){
-      raw.cashEvents.forEach(ev=>{
-        const dd = toDate(ev.date);
-        if(!dd) return;
-        events.push({
-          date: dd,
-          amount: Number(ev.amount||0),
-          client: ev.client||"—",
-          actual: !!ev.actual
-        });
-      });
-    }else{
-      // Kui cashEvents puudub, tuleta invoices alusel (tasutud -> actual, ülejäänud due -> forecast)
-      invoices.forEach(inv=>{
-        if(inv.paidDate){
-          events.push({date:inv.paidDate, amount:inv.amount, client:inv.client, actual:true});
-        }else if(inv.dueDate){
-          events.push({date:inv.dueDate, amount:inv.amount, client:inv.client, actual:false});
-        }
-      });
-    }
-
-    // Agregeeri päevaks
-    const byDay = new Map();
-    events.forEach(ev=>{
-      const k = +ev.date;
-      const cur = byDay.get(k) || {date:ev.date, amount:0, actual:true};
-      cur.amount += ev.amount;
-      cur.actual = cur.actual && ev.actual;
-      byDay.set(k, cur);
+  // ======= HOIATUSED (demo) =======
+  (function(){
+    const data=[{type:"critical",title:"Likviidsusauk 5 päeva pärast",detail:"Jääk ei kata tarnija Z makset (2 500 €)."},
+                {type:"info",title:"Paku ettemakse soodustust",detail:"Klient Y võib maksta varem 2% soodustusega."},
+                {type:"warn",title:"Lükka tarnija X arve edasi",detail:"Lükka 1 200 € 7 päeva, et jääk püsiks positiivne."}];
+    const el=$("#alerts");
+    data.forEach(a=>{
+      const tone=a.type==="critical"?"#fecaca":(a.type==="warn"?"#fde68a":"#bbf7d0");
+      const card=document.createElement('div');
+      card.style.cssText=`border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px;background:${tone}20`;
+      card.innerHTML=`<div style="font-weight:600">${a.title}</div><div class="muted" style="font-size:13px">${a.detail}</div>`;
+      el.appendChild(card);
     });
+  })();
 
-    const start = Number(raw.startingBalance||0);
-    const rows = [...byDay.values()].sort((a,b)=>a.date-b.date);
-    let run = start;
-    series = rows.map(r=>{ run += r.amount; return { date:r.date, balance:run, actual:r.actual }; });
-
-    if(!series.length){
-      const today=new Date(); today.setHours(0,0,0,0);
-      series = [{date: today, balance: start, actual:true}];
-    }
+  // ======= WHAT-IF =======
+  const delay=$("#delay"),discount=$("#discount"),delayVal=$("#delay-val"),discountVal=$("#discount-val");
+  delay.oninput=()=>delayVal.textContent=delay.value;
+  discount.oninput=()=>discountVal.textContent=discount.value;
+  $("#rerun").addEventListener('click',simulate);
+  function simulate(){
+    const dly=+delay.value||0, disc=+discount.value||0;
+    const factor=1+Math.min(.5,dly*.05)-Math.min(.3,disc*.03);
+    const pivot=+new Date(2025,8,2);
+    clientsState=clientsState.map(c=>({...c,data:c.baseData.map(pt=>(+pt.date===pivot)?{...pt,balance:Math.round(pt.balance*factor)}:{...pt})}));
+    refresh(); toast("Stsenaarium uuendatud");
   }
 
-  // Horisont
-  function setRange(r){
-    range = r;
-    if(!series.length){ visible = []; return; }
-    const start = new Date(series[0].date);
-    const end   = new Date(start); end.setDate(end.getDate()+r);
-    visible = series.filter(pt => pt.date >= start && pt.date <= end);
-    refreshKPIs();
-    drawChart();
-  }
+  // ======= FORECAST (30/60/90) =======
+  function initRange(r){range=r;rebuild();simulate()}
+  document.getElementById('createBtn').onclick=()=>{
+    const r=parseInt(document.getElementById('horizon').value,10)||30;
+    initRange(r); toast(`Prognoos loodud ${r} päevaks`);
+  };
 
-  // KPI-d
-  function refreshKPIs(){
-    if(!visible.length){
-      $("#kpi-low").textContent = "–";
-      $("#kpi-risk").textContent = "–";
-      $("#kpi-dso").textContent = "–";
-      $("#kpi-savings").textContent = "–";
-      $("#chart-note").textContent = "";
-      return;
-    }
-    const low = visible.reduce((m,p)=>Math.min(m,p.balance), Infinity);
-    $("#kpi-low").textContent = Number.isFinite(low)? `${fmt(low)} €` : "–";
-    $("#result-low") && ($("#result-low").textContent = Number.isFinite(low)? `${fmt(low)} €` : "–");
-    $("#chart-note").innerHTML = low<0
-      ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
-      : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
-
-    const riskDays = visible.filter(p=>!p.actual && p.balance<0).length;
-    $("#kpi-risk").textContent = String(riskDays);
-
-    const paid = invoices.filter(i=>i.issueDate && i.paidDate);
-    const dso = paid.length ? Math.round(paid.reduce((s,i)=>s+((i.paidDate - i.issueDate)/(1000*60*60*24)),0)/paid.length) : null;
-    $("#kpi-dso").textContent = dso!=null ? `${dso} p` : "–";
-
-    const receivables = invoices.filter(i=>!i.paidDate).reduce((s,i)=>s+(i.amount||0),0);
-    const savings = Math.round(receivables*0.02);
-    $("#kpi-savings").textContent = `${fmt(savings)} €`;
-  }
-
-  // What-IF
-  function applyWhatIf(){
-    if(!series.length) return;
-    const dly = parseInt($("#delay").value||'0',10);
-    const disc= parseInt($("#discount").value||'0',10);
-    $("#delay-val").textContent = String(dly);
-    $("#discount-val").textContent = String(disc);
-
-    // Leia prognoosi madalaim punkt ja nihuta sellest edasi
-    let idx=-1, best=Infinity;
-    for(let i=0;i<series.length;i++){
-      if(!series[i].actual && series[i].balance<best){
-        best=series[i].balance; idx=i;
-      }
-    }
-    if(idx>=0){
-      const factor = 1 + Math.min(.5, dly*.05) - Math.min(.3, disc*.03);
-      const delta  = Math.round(series[idx].balance * (factor-1));
-      for(let i=idx;i<series.length;i++){
-        series[i] = {...series[i], balance: series[i].balance + delta};
-      }
-      setRange(range);
-    }
-    toast("Stsenaarium uuendatud");
-  }
-
-  // Graafik
-  function drawChart(){
-    const el=$("#chart"); el.innerHTML="";
-    if(!visible.length){ return; }
-    const w=el.clientWidth||600,h=el.clientHeight||240,p={l:46,r:10,t:10,b:26};
-    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    svg.setAttribute("viewBox",`0 0 ${w} ${h}`); el.appendChild(svg);
-
-    const defs=document.createElementNS(svg.namespaceURI,"defs");
-    const grad=document.createElementNS(svg.namespaceURI,"linearGradient");
-    grad.setAttribute("id","grad"); grad.setAttribute("x1","0"); grad.setAttribute("y1","0"); grad.setAttribute("x2","0"); grad.setAttribute("y2","1");
-    const g1=document.createElementNS(svg.namespaceURI,"stop"); g1.setAttribute("offset","0%"); g1.setAttribute("stop-color","var(--accent)"); g1.setAttribute("stop-opacity","0.30");
-    const g2=document.createElementNS(svg.namespaceURI,"stop"); g2.setAttribute("offset","100%"); g2.setAttribute("stop-color","var(--accent)"); g2.setAttribute("stop-opacity","0.02");
-    grad.appendChild(g1); grad.appendChild(g2); defs.appendChild(grad); svg.appendChild(defs);
-
-    const xs=visible.map(d=>fDDMM(d.date)), ys=visible.map(d=>d.balance);
-    const xstep=(w-p.l-p.r)/Math.max(1,(xs.length-1));
-    const ymin=Math.min(0,...ys), ymax=Math.max(...ys), yspan=Math.max(1,ymax-ymin);
-    const X=i=>p.l+i*xstep, Y=v=>p.t+(h-p.t-p.b)*(1-(v-ymin)/yspan);
-
-    const axis=document.createElementNS(svg.namespaceURI,"g"); axis.setAttribute("class","axis");
-    const maxTicks=8, step=Math.max(1,Math.ceil(xs.length/maxTicks));
-    xs.forEach((lbl,i)=>{
-      const tx=X(i);
-      const gl=document.createElementNS(svg.namespaceURI,"line");
-      gl.setAttribute("x1",tx); gl.setAttribute("x2",tx); gl.setAttribute("y1",p.t); gl.setAttribute("y2",h-p.b);
-      gl.setAttribute("stroke","var(--border)"); gl.setAttribute("stroke-dasharray","3 3"); axis.appendChild(gl);
-      if(i%step===0){
-        const t=document.createElementNS(svg.namespaceURI,"text");
-        t.setAttribute("x",tx); t.setAttribute("y",h-6); t.setAttribute("text-anchor","middle"); t.textContent=lbl; axis.appendChild(t);
-      }
-    });
-    for(let i=0;i<=4;i++){
-      const v=ymin+(yspan/4)*i,ty=Y(v);
-      const hl=document.createElementNS(svg.namespaceURI,"line");
-      hl.setAttribute("x1",p.l); hl.setAttribute("x2",w-p.r); hl.setAttribute("y1",ty); hl.setAttribute("y2",ty);
-      hl.setAttribute("stroke","var(--border)"); hl.setAttribute("stroke-dasharray","3 3"); axis.appendChild(hl);
-      const lab=document.createElementNS(svg.namespaceURI,"text");
-      lab.setAttribute("x",p.l-8); lab.setAttribute("y",ty+4); lab.setAttribute("text-anchor","end"); lab.textContent=fmt(v); axis.appendChild(lab);
-    }
-    svg.appendChild(axis);
-
-    if(xs.length){
-      let dpath=""; visible.forEach((pt,i)=>{const px=X(i),py=Y(pt.balance); dpath+=(i===0?`M ${px} ${py}`:` L ${px} ${py}`)});
-      const y0=Y(0); dpath+=` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;
-      const area=document.createElementNS(svg.namespaceURI,"path"); area.setAttribute("d",dpath); area.setAttribute("class","area"); svg.appendChild(area);
-      const zero=document.createElementNS(svg.namespaceURI,"line"); zero.setAttribute("x1",p.l); zero.setAttribute("x2",w-p.r); zero.setAttribute("y1",y0); zero.setAttribute("y2",y0); zero.setAttribute("class","zero"); svg.appendChild(zero);
-    }
-  }
-
-  // CSV eksport (kogu seeria)
-  $("#exportBtn").onclick=()=>{
-    if(!series.length){ toast("Pole midagi eksportida"); return; }
-    const rows=[["Kuupäev","Kumulatiivne jääk (€)","Märkus"]];
-    series.forEach(p=>{
-      rows.push([fDDMM(p.date), String(p.balance), p.actual?"Tegelik":"Prognoos"]);
+  // ======= CSV EKSPORT =======
+  document.getElementById('exportBtn').onclick=()=>{
+    const today=new Date(); today.setHours(0,0,0,0);
+    const rows=[["Kuupäev","Kliendi nimi","Tegelik jääk (€)","Prognoositud jääk (€)","Märkus"]];
+    clientsState.forEach(c=>{
+      const by=new Map();
+      (c.baseData||[]).forEach(p=>by.set(+p.date,{date:new Date(p.date),actual:p.balance,forecast:null,client:c.name}));
+      (c.data||[]).forEach(p=>{const k=+p.date;const rec=by.get(k)||{date:new Date(p.date),actual:null,forecast:null,client:c.name};rec.forecast=p.balance;by.set(k,rec)});
+      [...by.values()].sort((a,b)=>+a.date-+b.date).forEach(r=>{
+        const past=(+r.date)<(+today);
+        rows.push([fDate(r.date),r.client,past&&r.actual!=null?String(r.actual):"",r.forecast!=null?String(r.forecast):"",past?"Tegelik":"Prognoos"]);
+      });
     });
     const csv=rows.map(cols=>cols.map(c=>{const s=String(c);return /[;"\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s}).join(";")).join("\n");
     const a=document.createElement("a");
@@ -425,65 +247,104 @@
     toast("CSV eksporditud");
   };
 
-  // Import nupud
-  $("#importBtn").onclick=()=> $("#fileInput").click();
-  $("#fileInput").addEventListener('change', async (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(!f) return;
-    const txt = await f.text();
-    try{
-      if(f.name.toLowerCase().endsWith('.json') || txt.trim().startsWith('{')){
-        const obj = JSON.parse(txt);
-        loadFromJSON(obj);
-      }else{
-        const rows = parseCSV(txt);
-        if(!rows.length) throw new Error('CSV tühi');
-        loadFromCSVRows(rows);
+  // ======= GRAAFIK & KPI =======
+  function drawChart(){
+    const s = aggregate('forecast');
+    const el = document.getElementById("chart");
+    el.innerHTML = "";
+    const w = el.clientWidth || 600, h = el.clientHeight || 240, p = {l:46,r:10,t:10,b:28};
+    const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("viewBox",`0 0 ${w} ${h}`); el.appendChild(svg);
+
+    // gradient
+    const defs=document.createElementNS(svg.namespaceURI,"defs");
+    const grad=document.createElementNS(svg.namespaceURI,"linearGradient");
+    grad.setAttribute("id","grad"); grad.setAttribute("x1","0"); grad.setAttribute("y1","0"); grad.setAttribute("x2","0"); grad.setAttribute("y2","1");
+    const g1=document.createElementNS(svg.namespaceURI,"stop"); g1.setAttribute("offset","0%"); g1.setAttribute("stop-color","#2563eb"); g1.setAttribute("stop-opacity","0.30");
+    const g2=document.createElementNS(svg.namespaceURI,"stop"); g2.setAttribute("offset","100%"); g2.setAttribute("stop-color","#2563eb"); g2.setAttribute("stop-opacity","0.02");
+    grad.appendChild(g1); grad.appendChild(g2); defs.appendChild(grad); svg.appendChild(defs);
+
+    // telje andmed (DD.MM) + dünaamiline hõrendus
+    const xs = s.map(d => fDateShort(d.date));
+    const ys = s.map(d => d.balance);
+    const xspan = Math.max(1, (xs.length - 1));
+    const xstep = (w - p.l - p.r) / xspan;
+    const ymin = Math.min(0, ...ys), ymax = Math.max(...ys), yspan = Math.max(1, ymax - ymin);
+    const X = i => p.l + i * xstep;
+    const Y = v => p.t + (h - p.t - p.b) * (1 - (v - ymin) / yspan);
+
+    const minLabelSpacing = 46;
+    const maxLabels = Math.max(2, Math.floor((w - p.l - p.r) / minLabelSpacing));
+    const labelStep = Math.max(1, Math.ceil(xs.length / maxLabels));
+
+    const axis = document.createElementNS(svg.namespaceURI,"g"); axis.setAttribute("class","axis");
+    xs.forEach((lbl, i) => {
+      const tx = X(i);
+      const tick = document.createElementNS(svg.namespaceURI,"line");
+      tick.setAttribute("x1", tx); tick.setAttribute("x2", tx);
+      tick.setAttribute("y1", p.t); tick.setAttribute("y2", h - p.b);
+      tick.setAttribute("stroke", "var(--border)");
+      tick.setAttribute("stroke-dasharray", "3 3");
+      axis.appendChild(tick);
+
+      if (i % labelStep === 0) {
+        const t = document.createElementNS(svg.namespaceURI,"text");
+        t.setAttribute("x", tx); t.setAttribute("y", h - 6);
+        t.setAttribute("text-anchor", "middle");
+        t.textContent = lbl;
+        axis.appendChild(t);
       }
-      setRange(parseInt($("#horizon").value,10) || 30);
-      toast("Andmed imporditud");
-    }catch(err){
-      console.error(err);
-      toast("Viga importimisel");
-    } finally {
-      e.target.value = "";
+    });
+
+    for (let i = 0; i <= 4; i++) {
+      const v = ymin + (yspan / 4) * i, ty = Y(v);
+      const line = document.createElementNS(svg.namespaceURI,"line");
+      line.setAttribute("x1", p.l); line.setAttribute("x2", w - p.r);
+      line.setAttribute("y1", ty);  line.setAttribute("y2", ty);
+      line.setAttribute("stroke", "var(--border)");
+      line.setAttribute("stroke-dasharray", "3 3");
+      axis.appendChild(line);
+
+      const lab = document.createElementNS(svg.namespaceURI,"text");
+      lab.setAttribute("x", p.l - 8); lab.setAttribute("y", ty + 4);
+      lab.setAttribute("text-anchor", "end");
+      lab.textContent = fmt(v);
+      axis.appendChild(lab);
     }
-  });
+    svg.appendChild(axis);
 
-  // Näidisandmed (üks klikk)
-  $("#loadSampleBtn").onclick=()=>{
-    const demo = {
-      startingBalance: 5000,
-      cashEvents: [
-        { date:"2025-08-21", amount: 3000, client:"Klient A", actual:true },
-        { date:"2025-08-25", amount:-4200, client:"Tarnija Z", actual:true },
-        { date:"2025-08-29", amount: 1300, client:"Klient B", actual:true },
-        { date:"2025-09-02", amount:-5000, client:"Tarnija Z", actual:false },
-        { date:"2025-09-06", amount: 5600, client:"Klient C", actual:false },
-        { date:"2025-09-10", amount: 2400, client:"Klient A", actual:false }
-      ],
-      invoices: [
-        { issueDate:"2025-08-01", dueDate:"2025-08-14", paidDate:"2025-08-12", amount:1800, client:"Klient A" },
-        { issueDate:"2025-08-10", dueDate:"2025-08-24", paidDate:"2025-09-01", amount:2400, client:"Klient B" },
-        { issueDate:"2025-08-22", dueDate:"2025-09-05",                 amount:2600, client:"Klient C" }
-      ]
-    };
-    loadFromJSON(demo);
-    setRange(parseInt($("#horizon").value,10) || 30);
-    toast("Näidisandmed laetud");
-  };
+    let dpath = "";
+    s.forEach((pt, i) => { const px = X(i), py = Y(pt.balance); dpath += (i===0 ? `M ${px} ${py}` : ` L ${px} ${py}`); });
+    const y0 = Y(0);
+    if (xs.length > 0) dpath += ` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;
+    const area = document.createElementNS(svg.namespaceURI,"path");
+    area.setAttribute("d", dpath); area.setAttribute("class", "area");
+    svg.appendChild(area);
 
-  // Loo prognoos
-  $("#createBtn").onclick=()=>{ const r=parseInt($("#horizon").value,10)||30; setRange(r); };
-  $("#rerun")?.addEventListener('click',()=>{ applyWhatIf(); });
-  $("#delay")?.addEventListener('input',e=>$("#delay-val").textContent=e.target.value);
-  $("#discount")?.addEventListener('input',e=>$("#discount-val").textContent=e.target.value);
-  window.addEventListener('resize',drawChart);
+    const zero = document.createElementNS(svg.namespaceURI,"line");
+    zero.setAttribute("x1", p.l); zero.setAttribute("x2", w - p.r);
+    zero.setAttribute("y1", y0);  zero.setAttribute("y2", y0);
+    zero.setAttribute("class", "zero");
+    svg.appendChild(zero);
+  }
 
-  // INIT: lae kohe näidisandmed, et demo töötaks
+  function refresh(){
+    const s=aggregate('forecast');
+    const low=s.reduce((m,p)=>Math.min(m,p.balance),Infinity);
+    $("#kpi-low").textContent=Number.isFinite(low)?`${fmt(low)} €`:"–";
+    $("#chart-note").innerHTML=low<0
+      ? `Prognoos näitab <span style="color:var(--red);font-weight:600">likviidsusauku ${fmt(low)} €</span>.`
+      : `<span style="color:var(--green);font-weight:600">Likviidsusauku ei tuvastatud</span>.`;
+    drawChart();
+  }
+
+  // INIT
+  function initRange(r){range=r;rebuild();simulate()}
   (function init(){
-    $("#loadSampleBtn").click();
+    const initial = parseInt(document.getElementById('horizon').value,10) || 30;
+    initRange(initial);
   })();
+  window.addEventListener('resize',drawChart);
 </script>
 </body>
 </html>
