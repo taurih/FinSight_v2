@@ -21,14 +21,13 @@
   .between{justify-content:space-between}.grow{flex:1}
   .brand{display:flex;gap:8px;align-items:center;font-weight:600}
 
-  /* Logo pildiga */
+  /* Logo – laiendatud versioon (pilt sisaldab teksti) */
   .logo{
-    width:32px;height:32px;border-radius:10px;display:grid;place-items:center;
-    background:transparent;padding:0;
+    height:40px; display:grid; place-items:center;
+    background:transparent; padding:0;
   }
-  .logo-img{
-    width:100%;height:100%;object-fit:contain;border-radius:10px;display:block;
-  }
+  .logo.wide{ width:140px; }
+  .logo-img{ width:100%; height:100%; object-fit:contain; display:block; }
   [data-theme="dark"] .logo{ background:transparent; }
 
   .input,.select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}
@@ -82,10 +81,9 @@
   <header class="top">
     <div class="container row">
       <div class="brand">
-        <div class="logo">
-          <img src="FinSightlogo.png" alt="FinSight logo" class="logo-img" width="32" height="32" decoding="async"/>
+        <div class="logo wide">
+          <img src="FinSightlogo.png" alt="FinSight logo" class="logo-img" decoding="async"/>
         </div>
-        FinSight
       </div>
       <div class="search-wrap grow"><input class="input" placeholder="Otsi arveid, kliente…"></div>
       <select id="horizon" class="select" style="max-width:140px">
