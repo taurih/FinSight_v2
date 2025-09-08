@@ -153,6 +153,17 @@
   const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500)};
   const relDays=(a,b)=>Math.round((+b - +a)/(1000*60*60*24));
 
+  // --- AJAVAHEMIK (täna ... täna + range päeva)
+  function windowBounds(){
+    const start = new Date(); start.setHours(0,0,0,0);
+    const end = new Date(start); end.setDate(end.getDate() + (Number(range)||30));
+    return { start, end };
+  }
+  function inWindow(dt, start, end){
+    const d = new Date(dt); d.setHours(0,0,0,0);
+    return (+d) >= (+start) && (+d) <= (+end);
+  }
+
   // ======= DEMO ANDMED =======
   const d=(y,m,day)=>new Date(y,m,day);
   const preset30=[{date:d(2025,7,21),balance:12000},{date:d(2025,7,25),balance:9800},{date:d(2025,7,29),balance:4100},{date:d(2025,8,2),balance:-2000},{date:d(2025,8,6),balance:3600},{date:d(2025,8,10),balance:8200}];
@@ -197,16 +208,16 @@
       byClient.get(r.client).baseData.push(base);
       byClient.get(r.client).data.push(rec);
 
-      // kui lamedas reas on meta-väljad, koosta meta
+      // kui lamedas reas on meta-väljad, koosta meta; NB! kasuta Number.isFinite
       const due_days = num(r.due_days);
       const upd = num(r.usual_payment_days);
       const past = (r.past_issues===true || r.past_issues===false) ? (r.past_issues?1:0) : num(r.past_issues);
-      if(isFinite(due_days)||isFinite(upd)||isFinite(past)){
+      if(Number.isFinite(due_days)||Number.isFinite(upd)||Number.isFinite(past)){
         const prev = clientMeta.get(r.client) || {};
         clientMeta.set(r.client,{
-          due_days: isFinite(due_days)?due_days:(prev.due_days ?? null),
-          usual_payment_days: isFinite(upd)?upd:(prev.usual_payment_days ?? null),
-          past_issues: isFinite(past)?past:(prev.past_issues ?? 0)
+          due_days: Number.isFinite(due_days)?due_days:(prev.due_days ?? null),
+          usual_payment_days: Number.isFinite(upd)?upd:(prev.usual_payment_days ?? null),
+          past_issues: Number.isFinite(past)?past:(prev.past_issues ?? 0)
         });
       }
     });
@@ -217,13 +228,18 @@
     });
   }
 
-  // agregaadid
-  function aggregate(kind){
-    const map=new Map();
-    clientsState.forEach(c=>(kind==='base'?c.baseData:c.data).forEach(p=>{
-      const k=+p.date; map.set(k,(map.get(k)||0)+ (Number(p.balance)||0));
+  // agregaadid (valikuline akna filter)
+  function aggregate(kind, {windowed=false} = {}){
+    const map = new Map();
+    const { start, end } = windowBounds();
+
+    clientsState.forEach(c => (kind==='base'?c.baseData:c.data).forEach(p=>{
+      if (windowed && !inWindow(p.date, start, end)) return;
+      const k = +p.date;
+      map.set(k, (map.get(k)||0) + (Number(p.balance)||0));
     }));
-    return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([k,sum])=>({date:new Date(+k),balance:sum}))
+
+    return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([k,sum])=>({date:new Date(+k),balance:sum}));
   }
 
   // ======= TUME/HELE =======
@@ -245,20 +261,19 @@
   discount.oninput=()=>discountVal.textContent=discount.value;
   $("#rerun").addEventListener('click',simulate);
 
-  // UUS: skaleeri kõik tuleviku punktid
+  // skaleeri kõik punktid valitud aknas
   function simulate(){
     if(!hasData){ toast("Andmeid pole – loo prognoos või impordi fail"); return; }
     const dly=+delay.value||0, disc=+discount.value||0;
     const factor=1 + Math.min(.5, dly*.05) - Math.min(.3, disc*.03);
 
-    const today0 = new Date(); today0.setHours(0,0,0,0);
+    const { start, end } = windowBounds();
     clientsState = clientsState.map(c => ({
       ...c,
       data: c.data.map(pt => {
-        const dt = new Date(pt.date); dt.setHours(0,0,0,0);
-        const isFuture = (+dt) >= (+today0);
+        const inWin = inWindow(pt.date, start, end);
         const val = Number(pt.balance) || 0;
-        return isFuture ? { ...pt, balance: Math.round(val * factor) } : { ...pt };
+        return inWin ? { ...pt, balance: Math.round(val * factor) } : { ...pt };
       })
     }));
 
@@ -328,9 +343,9 @@
       rows.forEach(r=>{
         const prev = clientMeta.get(r.client) || {};
         clientMeta.set(r.client,{
-          due_days: isFinite(r.due_days)?r.due_days:(prev.due_days ?? null),
-          usual_payment_days: isFinite(r.usual_payment_days)?r.usual_payment_days:(prev.usual_payment_days ?? null),
-          past_issues: isFinite(r.past_issues)?r.past_issues:(prev.past_issues ?? 0)
+          due_days: Number.isFinite(r.due_days)?r.due_days:(prev.due_days ?? null),
+          usual_payment_days: Number.isFinite(r.usual_payment_days)?r.usual_payment_days:(prev.usual_payment_days ?? null),
+          past_issues: Number.isFinite(r.past_issues)?r.past_issues:(prev.past_issues ?? 0)
         });
       });
 
@@ -378,18 +393,21 @@
   // ======= CSV EKSPORT =======
   document.getElementById('exportBtn').onclick=()=>{
     if(!hasData){ toast("Andmeid pole eksportida"); return; }
-    const today=new Date(); today.setHours(0,0,0,0);
+    const { start, end } = windowBounds();
     const rows=[["Kuupäev","Kliendi nimi","Tegelik jääk (€)","Prognoositud jääk (€)","Märkus"]];
     if(importedRows){
       importedRows.forEach(r=>{
         const dt=new Date(r.date);
-        const past=(+dt)<(+today);
+        const past = (+dt) < (+start);
+        if(!inWindow(dt, start, end) && !past) return; // ekspordi ainult akna sees + minevik akna algusest tagasi
         rows.push([fDate(dt), r.client || "", r.actual ?? "", r.forecast ?? "", past?"Tegelik":"Prognoos"]);
       });
     }else{
       clientsState.forEach(c=>{
         (c.data||[]).forEach(pt=>{
-          const past=(+pt.date)<(+today);
+          const dt=new Date(pt.date);
+          const past=(+dt)<(+start);
+          if(!inWindow(dt, start, end) && !past) return;
           const base = (c.baseData.find(x=>+x.date==+pt.date)||{}).balance;
           rows.push([fDate(pt.date), c.name, past?fmt(base):"", (pt.balance!=null?String(pt.balance):""), past?"Tegelik":"Prognoos"]);
         });
@@ -403,33 +421,33 @@
     toast("CSV eksporditud");
   };
 
-  // ======= KPI arvutused =======
+  // ======= KPI arvutused (horisondis) =======
   function computeKPIs(){
     if(!hasData) return {low:null,risk:null,dso:null,savings:null};
 
-    const s = aggregate('forecast');
+    const s = aggregate('forecast', { windowed:true });
     const low = s.length ? s.reduce((m,p)=>Math.min(m, Number(p.balance)||0), Infinity) : null;
 
-    // Riskantsed punktid (tulevikus negatiivsed)
+    // Riskantsed punktid horisondis (negatiivsed)
     let risk = null;
-    const today = new Date(); today.setHours(0,0,0,0);
+    const { start, end } = windowBounds();
     if(importedRows){
       risk = importedRows.filter(r=>{
-        const dt=new Date(r.date); dt.setHours(0,0,0,0);
-        return (+dt)>=(+today) && (Number(r.forecast)||0) < 0;
+        const f = Number(r.forecast)||0;
+        return f < 0 && inWindow(r.date, start, end);
       }).length;
     }else{
       let cnt=0;
       clientsState.forEach(c=>{
         c.data.forEach(pt=>{
-          const dt=new Date(pt.date); dt.setHours(0,0,0,0);
-          if((+dt)>=(+today) && (Number(pt.balance)||0)<0) cnt++;
+          const v = Number(pt.balance)||0;
+          if (v<0 && inWindow(pt.date, start, end)) cnt++;
         });
       });
       risk = cnt;
     }
 
-    // DSO: proovi esmalt meta keskmist; muidu varuvariant delta'dest
+    // DSO: meta keskmine; varuvariant delta'dest (mitte horisondiga seotud)
     let dso = null;
     const metas = clientsState
       .map(c => (clientMeta.get(c.name)||{}).usual_payment_days)
@@ -449,34 +467,30 @@
         list.sort((a,b)=>+a.date-+b.date);
         const today0 = new Date(); today0.setHours(0,0,0,0);
         const past = list.filter(x => (+x.date) < (+today0));
-        const firstForecast = past.find(x => isFinite(x.forecast));
-        const firstActual = past.find(x => isFinite(x.actual) && (!firstForecast || +x.date >= +firstForecast.date));
+        const firstForecast = past.find(x => Number.isFinite(x.forecast));
+        const firstActual = past.find(x => Number.isFinite(x.actual) && (!firstForecast || +x.date >= +firstForecast.date));
         if(firstForecast && firstActual){
           const diffDays = Math.round((+firstActual.date - +firstForecast.date)/(1000*60*60*24));
-          if(diffDays>=0 && isFinite(diffDays)) deltas.push(diffDays);
+          if(diffDays>=0 && Number.isFinite(diffDays)) deltas.push(diffDays);
         }
       });
       if(deltas.length) dso = Math.round(deltas.reduce((a,b)=>a+b,0)/deltas.length);
     }
 
-    // Säästupotentsiaal (2% tuleviku negatiivsete punktide summast)
+    // Säästupotentsiaal (2%) horisondis olevate negatiivsete summast
     let savings = null;
     if(importedRows){
-      const today0 = new Date(); today0.setHours(0,0,0,0);
       const sumNeg = importedRows.reduce((acc,r)=>{
-        const dt=new Date(r.date); dt.setHours(0,0,0,0);
         const f = Number(r.forecast)||0;
-        return acc + (((+dt)>=(+today0) && f<0)? Math.abs(f) : 0);
+        return acc + ((f<0 && inWindow(r.date, start, end)) ? Math.abs(f) : 0);
       },0);
       savings = sumNeg * 0.02;
     }else{
-      const today0 = new Date(); today0.setHours(0,0,0,0);
       let sumNeg = 0;
       clientsState.forEach(c=>{
         c.data.forEach(pt=>{
-          const dt=new Date(pt.date); dt.setHours(0,0,0,0);
           const v = Number(pt.balance)||0;
-          if((+dt)>=(+today0) && v<0) sumNeg += Math.abs(v);
+          if (v<0 && inWindow(pt.date, start, end)) sumNeg += Math.abs(v);
         });
       });
       savings = sumNeg * 0.02;
@@ -485,10 +499,10 @@
     return {low, risk, dso, savings};
   }
 
-  // ======= HOIATUSTE TUVASTUS (kliendipõhine) =======
+  // ======= HOIATUSTE TUVASTUS (kliendipõhine, horisondis) =======
   function detectAlerts(){
     if(!hasData) return [];
-    const today = new Date(); today.setHours(0,0,0,0);
+    const { start, end } = windowBounds();
 
     const alertsByClient = [];
 
@@ -498,21 +512,21 @@
       const usual = meta.usual_payment_days ?? null;
       const issues = meta.past_issues ?? 0;
 
-      const futureNeg = (c.data||[]).filter(p=>{
-        const dt=new Date(p.date); dt.setHours(0,0,0,0);
-        return (+dt) >= (+today) && (Number(p.balance)||0) < 0;
+      const neg = (c.data||[]).filter(p=>{
+        const v = Number(p.balance)||0;
+        return v < 0 && inWindow(p.date, start, end);
       });
 
-      if(!futureNeg.length) return;
+      if(!neg.length) return;
 
-      const firstNeg = futureNeg.reduce((m,p)=> (p.date < m.date ? p : m), futureNeg[0]);
-      const days = Math.max(0, relDays(today, firstNeg.date));
+      const firstNeg = neg.reduce((m,p)=> (p.date < m.date ? p : m), neg[0]);
+      const days = Math.max(0, Math.round((+firstNeg.date - +start)/(1000*60*60*24)));
       const type = days<=3 ? "critical" : (days<=10 ? "warn" : "info");
 
       const metaBits = [];
-      if(isFinite(due)) metaBits.push(`maksetähtaeg ~${due} p`);
-      if(isFinite(usual)) metaBits.push(`tüüpiline laekumine ~${usual} p`);
-      if(isFinite(issues) && issues>0) metaBits.push(`varasemaid probleeme: ${issues}×`);
+      if(Number.isFinite(due)) metaBits.push(`maksetähtaeg ~${due} p`);
+      if(Number.isFinite(usual)) metaBits.push(`tüüpiline laekumine ~${usual} p`);
+      if(Number.isFinite(issues) && issues>0) metaBits.push(`varasemaid probleeme: ${issues}×`);
 
       alertsByClient.push({
         client: c.name,
@@ -522,14 +536,12 @@
       });
     });
 
-    const s = aggregate('forecast');
-    const futureNegAgg = s.filter(p=>{
-      const dt=new Date(p.date); dt.setHours(0,0,0,0);
-      return (+dt) >= (+today) && (Number(p.balance)||0) < 0;
-    });
+    // Üldine portfellihäire horisondis
+    const s = aggregate('forecast', { windowed:true });
+    const futureNegAgg = s.filter(p=> (Number(p.balance)||0) < 0 );
     if(futureNegAgg.length){
       const minPt = futureNegAgg.reduce((m,p)=> (p.balance < m.balance ? p : m), futureNegAgg[0]);
-      const daysAgg = Math.max(0, relDays(today, minPt.date));
+      const daysAgg = Math.max(0, Math.round((+minPt.date - +start)/(1000*60*60*24)));
       alertsByClient.unshift({
         client: null,
         type: daysAgg<=3 ? "critical" : "warn",
@@ -563,7 +575,21 @@
     byClient.forEach(a=>el.appendChild(paintCard(a)));
   }
 
-  // ======= GRAAFIK & KPI =======
+  // ======= PADIMINE GRAAFIKU JAOKS =======
+  function padSeries(s, start, end){
+    if(!s || !s.length) return s;
+    const out = [...s];
+    const first = s[0], last = s[s.length-1];
+    if(+first.date > +start){
+      out.unshift({date:new Date(start), balance:first.balance});
+    }
+    if(+last.date < +end){
+      out.push({date:new Date(end), balance:last.balance});
+    }
+    return out;
+  }
+
+  // ======= GRAAFIK (horisondis, pad'iga) =======
   function drawChart(){
     const el = document.getElementById("chart");
     el.innerHTML = "";
@@ -572,7 +598,10 @@
       return;
     }
 
-    const s = aggregate('forecast');
+    const { start, end } = windowBounds();
+    let s = aggregate('forecast', { windowed:true });
+    s = padSeries(s, start, end); // <-- lisa sentinaalid, et joon ulatuks akna lõpuni
+
     const w = el.clientWidth || 600, h = el.clientHeight || 240, p = {l:46,r:10,t:10,b:28};
     const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.setAttribute("viewBox",`0 0 ${w} ${h}`); el.appendChild(svg);
@@ -584,9 +613,10 @@
     const g2=document.createElementNS(svg.namespaceURI,"stop"); g2.setAttribute("offset","100%"); g2.setAttribute("stop-color","#2563eb"); g2.setAttribute("stop-opacity","0.02");
     grad.appendChild(g1); grad.appendChild(g2); defs.appendChild(grad); svg.appendChild(defs);
 
-    const sAgg = s;
-    const xs = sAgg.map(d => fDateShort(d.date));
-    const ys = sAgg.map(d => Number(d.balance)||0);
+    const xs = s.map(d => fDateShort(d.date));
+    const ys = s.map(d => Number(d.balance)||0);
+    if (xs.length === 0){ document.getElementById('chart-note').textContent = "Valitud aknas andmeid ei ole."; return; }
+
     const xspan = Math.max(1, (xs.length - 1));
     const xstep = (w - p.l - p.r) / xspan;
     const ymin = Math.min(0, ...ys), ymax = Math.max(...ys), yspan = Math.max(1, ymax - ymin);
@@ -634,7 +664,7 @@
     svg.appendChild(axis);
 
     let dpath = "";
-    sAgg.forEach((pt, i) => { const px = X(i), py = Y(Number(pt.balance)||0); dpath += (i===0 ? `M ${px} ${py}` : ` L ${px} ${py}`); });
+    s.forEach((pt, i) => { const px = X(i), py = Y(Number(pt.balance)||0); dpath += (i===0 ? `M ${px} ${py}` : ` L ${px} ${py}`); });
     const y0 = Y(0);
     if (xs.length > 0) dpath += ` L ${X(xs.length-1)} ${y0} L ${X(0)} ${y0} Z`;
     const area = document.createElementNS(svg.namespaceURI,"path");
@@ -643,7 +673,8 @@
 
     const zero = document.createElementNS(svg.namespaceURI,"line");
     zero.setAttribute("x1", p.l); zero.setAttribute("x2", w - p.r);
-    zero.setAttribute("y1", y0);  zero.setAttribute("y2", y0);
+    zero.setAttribute("y1", y0);  y0;
+    zero.setAttribute("y2", y0);
     zero.setAttribute("class", "zero");
     svg.appendChild(zero);
   }
@@ -651,7 +682,7 @@
   function refresh(){
     const {low, risk, dso, savings} = computeKPIs();
 
-    // UUS: uuenda What-IF väljundit
+    // Uuenda What-IF väljundit
     const res = document.getElementById('result-low');
     if (res) res.textContent = (low==null ? "–" : `${fmt(low)} €`);
 
